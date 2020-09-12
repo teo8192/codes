@@ -1,10 +1,7 @@
 use num_bigint::{BigUint, RandBigInt, ToBigUint};
-use rand::Rng;
 
 fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
     let big = |x: u32| x.to_biguint().unwrap();
-
-    println!("got: {}", number);
 
     if number < big(10) {
         return if [big(2), big(3), big(5), big(7)].contains(&number) {
@@ -32,10 +29,7 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
 
     'witness: for _ in 0..rounds {
         let a = rng.gen_biguint_range(&big(2), &(&number - big(2)));
-        println!("{}", &a);
         let mut x = a.pow(d) % &number;
-
-        println!("x: {}", x);
 
         if x == big(1) || x == &number - big(1) {
             continue 'witness;
@@ -44,14 +38,12 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
         for _ in 0..s - 1 {
             let square = |x| &x * &x;
             x = square(x) % &number;
-            println!("{}, {}", x, s);
             if x == big(1) {
                 break;
             } else if x == &number - big(1) {
                 continue 'witness;
             }
         }
-        println!("hax x as {}", x);
         return None;
     }
 
