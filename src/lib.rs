@@ -41,12 +41,12 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
             continue 'witness;
         }
 
-        'inner: for _ in 0..s - 1 {
+        for _ in 0..s - 1 {
             let square = |x| &x * &x;
             x = square(x) % &number;
             println!("{}, {}", x, s);
             if x == big(1) {
-                break 'inner;
+                break;
             } else if x == &number - big(1) {
                 continue 'witness;
             }
