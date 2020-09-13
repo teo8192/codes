@@ -81,14 +81,14 @@ impl Iterator for Prime {
         if &num & &big(1) == big(0) {
             num += big(1);
         }
-        
+
         Some(Prime {
             num: std::iter::repeat(num)
-                    .enumerate()
-                    .map(|(n, num)| num + big((n as u32) << 1))
-                    .filter_map(|n| rabin_miller(n, 7))
-                    .next(),
-            size: self.size
+                .enumerate()
+                .map(|(n, num)| num + big((n as u32) << 1))
+                .filter_map(|n| rabin_miller(n, 7))
+                .next(),
+                size: self.size
         })
     }
 }
