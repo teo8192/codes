@@ -64,6 +64,16 @@ impl Prime {
     pub fn new(size: u32) -> Prime {
         Prime { num: None, size }
     }
+
+    // returns the first pseudoprime after the seed
+    fn prime_after(&self, seed: BigUint) -> BigUint {
+        std::iter::repeat(seed)
+            .enumerate()
+            .map(|(n, num)| num + big((n as u32) << 1))
+            .filter_map(|n| rabin_miller(n, 7))
+            .next()
+            .unwrap()
+    }
 }
 
 impl Iterator for Prime {
@@ -77,11 +87,7 @@ impl Iterator for Prime {
         }
 
         Some(Prime {
-            num: std::iter::repeat(num)
-                .enumerate()
-                .map(|(n, num)| num + big((n as u32) << 1))
-                .filter_map(|n| rabin_miller(n, 7))
-                .next(),
+            num: Some(self.prime_after(num)),
             size: self.size,
         })
     }
