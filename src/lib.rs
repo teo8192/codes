@@ -6,15 +6,18 @@ fn big(num: u32) -> BigUint {
 }
 
 fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
+    let zero = big(0);
+    let one = big(1);
+    let two = big(2);
 
-    if &number & big(1) == big(0) {
-        return if number == big(2) { Some(big(2)) } else { None };
+    if &number & &one == zero {
+        return if number == two { Some(two) } else { None };
     }
 
     let mut s = 0;
-    let mut d = &number - big(1);
+    let mut d = &number - &one;
 
-    while &d & big(1) == big(0) {
+    while &d & &one == zero {
         s += 1;
         d >>= 1;
     }
@@ -22,18 +25,18 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
     let mut rng = rand::thread_rng();
 
     'witness: for _ in 0..rounds {
-        let a: BigUint = rng.gen_biguint_range(&big(2), &(&number - big(2)));
+        let a: BigUint = rng.gen_biguint_range(&two, &(&number - &two));
         let mut x = a.modpow(&d, &number);
 
-        if x == big(1) || x == &number - big(1) {
+        if x == one || x == &number - &one {
             continue 'witness;
         }
 
         for _ in 0..s - 1 {
-            x = x.modpow(&big(2), &number);
-            if x == big(1) {
+            x = x.modpow(&two, &number);
+            if x == one {
                 break;
-            } else if x == &number - big(1) {
+            } else if x == &number - &one {
                 continue 'witness;
             }
         }
