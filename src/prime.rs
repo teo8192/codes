@@ -56,14 +56,14 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
 }
 
 #[derive(Debug)]
-pub struct Prime {
-    num: Option<BigUint>,
+pub struct PrimeGenerator<'a> {
     size: u32,
+    rng: &'a mut rand::rngs::ThreadRng,
 }
 
-impl Prime {
-    pub fn new(size: u32) -> Prime {
-        Prime { num: None, size }
+impl<'a> PrimeGenerator<'a> {
+    pub fn new<'b>(size: u32, rng: &'b mut rand::rngs::ThreadRng) -> PrimeGenerator<'b> {
+        PrimeGenerator { size, rng }
     }
 
     // returns the first pseudoprime after the seed
@@ -77,20 +77,17 @@ impl Prime {
     }
 }
 
-impl Iterator for Prime {
-    type Item = Prime;
-    fn next(&mut self) -> Option<Prime> {
-        let mut rng = rand::thread_rng();
-
-        let mut num = rng.gen_biguint_range(&(big(1) << self.size - 1), &(big(1) << self.size));
+impl<'a> Iterator for PrimeGenerator<'a> {
+    type Item = BigUint;
+    fn next(&mut self) -> Option<BigUint> {
+        let mut num = self
+            .rng
+            .gen_biguint_range(&(big(1) << self.size - 1), &(big(1) << self.size));
         if &num & &big(1) == big(0) {
             num += big(1);
         }
 
-        Some(Prime {
-            num: Some(self.prime_after(num)),
-            size: self.size,
-        })
+        Some(self.prime_after(num))
     }
 }
 
@@ -128,7 +125,7 @@ impl Iterator for Primes {
 
 #[cfg(test)]
 mod tests {
-    use super::{rabin_miller, Prime, Primes};
+    use super::{rabin_miller, PrimeGenerator, Primes};
     use num_bigint::{BigUint, ToBigUint};
 
     fn big(x: u32) -> BigUint {
@@ -167,7 +164,9 @@ mod tests {
     fn test_iter() {
         let size = 512;
 
-        if let Some(p) = Prime::new(size).next() {
+        let mut rng = rand::thread_rng();
+
+        if let Some(p) = PrimeGenerator::new(size, &mut rng).next() {
             println!("{:?}", p);
         } else {
             println!("It failed?!?!?!?");
