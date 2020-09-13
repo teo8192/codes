@@ -1,7 +1,11 @@
 use num_bigint::{BigUint, RandBigInt, ToBigUint};
+use std::iter::Iterator;
+
+fn big(num: u32) -> BigUint {
+    num.to_biguint().unwrap()
+}
 
 fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
-    let big = |x: u32| x.to_biguint().unwrap();
 
     if &number & big(1) == big(0) {
         return if number == big(2) { Some(big(2)) } else { None };
