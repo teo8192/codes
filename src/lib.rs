@@ -43,6 +43,42 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
     Some(number)
 }
 
+#[derive(Debug)]
+struct Prime {
+    num: Option<BigUint>,
+    size: u32
+}
+
+impl Prime {
+    fn new(size: u32) -> Prime {
+        Prime {
+            num: None,
+            size
+        }
+    }
+}
+
+impl Iterator for Prime {
+    type Item = Prime;
+    fn next(&mut self) -> Option<Prime> {
+        let mut rng = rand::thread_rng();
+
+        let mut num = rng.gen_biguint_range(&(big(1) << self.size - 1), &(big(1) << self.size));
+        if &num & &big(1) == big(0) {
+            num += big(1);
+        }
+        
+        Some(Prime {
+            num: std::iter::repeat(num)
+                    .enumerate()
+                    .map(|(n, num)| num + big((n as u32) << 1))
+                    .filter_map(|n| rabin_miller(n, 7))
+                    .next(),
+            size: self.size
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::rabin_miller;
@@ -78,5 +114,17 @@ mod tests {
     fn composites() {
         assert_eq!(rabin_miller(big(9), 7), None);
         assert_eq!(rabin_miller(big(95), 7), None);
+    }
+
+    #[test]
+    fn test_iter() {
+        let size = 2048;
+
+        if let Some(p) = super::Prime::new(size).next() {
+            println!("{:?}", p);
+        } else {
+            println!("It failed?!?!?!?");
+            assert!(false);
+        }
     }
 }
