@@ -11,14 +11,11 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
     let two = big(2);
 
     if number < big(10) {
-        return if number == big(2) ||
-            number == big(3) || 
-            number == big(5) || 
-            number == big(7) {
-                Some(number)
-            } else {
-                None
-            };
+        return if number == big(2) || number == big(3) || number == big(5) || number == big(7) {
+            Some(number)
+        } else {
+            None
+        };
     }
 
     if &number & &one == zero {
@@ -60,15 +57,12 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
 #[derive(Debug)]
 struct Prime {
     num: Option<BigUint>,
-    size: u32
+    size: u32,
 }
 
 impl Prime {
     pub fn new(size: u32) -> Prime {
-        Prime {
-            num: None,
-            size
-        }
+        Prime { num: None, size }
     }
 }
 
@@ -88,7 +82,7 @@ impl Iterator for Prime {
                 .map(|(n, num)| num + big((n as u32) << 1))
                 .filter_map(|n| rabin_miller(n, 7))
                 .next(),
-                size: self.size
+            size: self.size,
         })
     }
 }
