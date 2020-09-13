@@ -1,8 +1,13 @@
 use num_bigint::{BigUint, RandBigInt, ToBigUint};
+use rayon::prelude::*;
 use std::iter::Iterator;
 
 fn big(num: u32) -> BigUint {
     num.to_biguint().unwrap()
+}
+
+fn copy(num: &BigUint) -> BigUint {
+    BigUint::new(num.to_u32_digits())
 }
 
 /// Probabalistic primality test
@@ -99,6 +104,17 @@ impl Primes {
     pub fn new() -> Primes {
         Primes { primes: vec![] }
     }
+
+    fn prime_range(from: BigUint, to: BigUint, step: BigUint) -> Vec<BigUint> {
+        std::iter::repeat(from)
+            .enumerate()
+            .map(|(n, num)| num + n.to_biguint().unwrap() * &step)
+            .take_while(|n| n < &to)
+            .collect::<Vec<BigUint>>()
+            .par_iter()
+            .filter_map(|value| rabin_miller(copy(value), 7))
+            .collect()
+    }
 }
 
 impl Iterator for Primes {
@@ -181,5 +197,37 @@ mod tests {
         let sieve = Primes::new();
         let primes: Vec<u32> = sieve.take(10).collect();
         assert_eq!(primes, vec![2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
+    }
+
+    #[test]
+    fn range() {
+        let primes = Primes::prime_range(
+            0.to_biguint().unwrap(),
+            10000.to_biguint().unwrap(),
+            1.to_biguint().unwrap(),
+        );
+        let primes_2: Vec<BigUint> = Primes::new()
+            .take_while(|x| x < &10000)
+            .map(|n| n.to_biguint().unwrap())
+            .collect();
+        assert_eq!(primes, primes_2);
+    }
+
+    #[test]
+    fn range_2() {
+        let from = 100000;
+        let to = from + 10000;
+        assert_eq!(
+            Primes::prime_range(
+                from.to_biguint().unwrap(),
+                to.to_biguint().unwrap(),
+                1.to_biguint().unwrap(),
+            ),
+            Primes::new()
+            .skip_while(|x| x <= &from)
+            .take_while(|x| x < &to)
+            .map(|n| n.to_biguint().unwrap())
+            .collect::<Vec<BigUint>>()
+        );
     }
 }

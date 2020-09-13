@@ -1,6 +1,8 @@
 #![feature(test)]
 extern crate test;
 
+extern crate rayon;
+
 mod prime;
 
 #[cfg(test)]
