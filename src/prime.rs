@@ -94,9 +94,41 @@ impl Iterator for Prime {
     }
 }
 
+pub struct Primes {
+    primes: Vec<u32>,
+}
+
+impl Primes {
+    pub fn new() -> Primes {
+        Primes { primes: vec![] }
+    }
+}
+
+impl Iterator for Primes {
+    type Item = u32;
+    fn next(&mut self) -> Option<u32> {
+        let seed = self.primes.last().unwrap_or(&2);
+        let next = std::iter::repeat(seed)
+            .enumerate()
+            .map(|(n, seed)| n as u32 + seed)
+            .filter_map(|n| {
+                for p in self.primes.iter() {
+                    if n % p == 0 {
+                        return None;
+                    }
+                }
+                Some(n)
+            })
+            .next()
+            .unwrap();
+        self.primes.push(next);
+        Some(next)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::rabin_miller;
+    use super::{rabin_miller, Prime, Primes};
     use num_bigint::{BigUint, ToBigUint};
 
     fn big(x: u32) -> BigUint {
@@ -135,11 +167,18 @@ mod tests {
     fn test_iter() {
         let size = 512;
 
-        if let Some(p) = super::Prime::new(size).next() {
+        if let Some(p) = Prime::new(size).next() {
             println!("{:?}", p);
         } else {
             println!("It failed?!?!?!?");
             assert!(false);
         }
+    }
+
+    #[test]
+    fn eratosthenes_sieve() {
+        let sieve = Primes::new();
+        let primes: Vec<u32> = sieve.take(10).collect();
+        assert_eq!(primes, vec![2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
     }
 }
