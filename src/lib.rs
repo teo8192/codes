@@ -64,7 +64,7 @@ struct Prime {
 }
 
 impl Prime {
-    fn new(size: u32) -> Prime {
+    pub fn new(size: u32) -> Prime {
         Prime {
             num: None,
             size
