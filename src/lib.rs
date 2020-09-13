@@ -10,6 +10,17 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
     let one = big(1);
     let two = big(2);
 
+    if number < big(10) {
+        return if number == big(2) ||
+            number == big(3) || 
+            number == big(5) || 
+            number == big(7) {
+                Some(number)
+            } else {
+                None
+            };
+    }
+
     if &number & &one == zero {
         return if number == two { Some(two) } else { None };
     }
