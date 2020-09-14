@@ -105,7 +105,7 @@ impl Primes {
         Primes { primes: vec![] }
     }
 
-    fn prime_range(from: BigUint, to: BigUint, step: BigUint) -> Vec<BigUint> {
+    pub fn prime_range(from: BigUint, to: BigUint, step: BigUint) -> Vec<BigUint> {
         std::iter::repeat(from)
             .enumerate()
             .map(|(n, num)| num + n.to_biguint().unwrap() * &step)
@@ -224,10 +224,10 @@ mod tests {
                 1.to_biguint().unwrap(),
             ),
             Primes::new()
-            .skip_while(|x| x <= &from)
-            .take_while(|x| x < &to)
-            .map(|n| n.to_biguint().unwrap())
-            .collect::<Vec<BigUint>>()
+                .skip_while(|x| x <= &from)
+                .take_while(|x| x < &to)
+                .map(|n| n.to_biguint().unwrap())
+                .collect::<Vec<BigUint>>()
         );
     }
 }
