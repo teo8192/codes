@@ -49,7 +49,7 @@ fn encode_block(data: &[u8; 11]) -> [u8; 2] {
 /// decode a block into a vector containing 11 bits.
 /// sould be rewritten to be either return an array of 11 bits
 /// or better yet: an iterator! Then the flat_map could work geiniously!
-fn decode_block(data: &[u8; 2]) -> Option<Vec<u8>> {
+fn decode_block(data: &[u8; 2]) -> Vec<u8> {
     // split the two bytes into 16 bits
     let mut localdata: Vec<u8> = (0..16)
         .map(|i| {
@@ -72,31 +72,27 @@ fn decode_block(data: &[u8; 2]) -> Option<Vec<u8>> {
     // verify the total parity
     // added the pos > 0 for it not to crash of bit 0 was the only bit flipped.
     if localdata.iter().fold(0, |n, i| n ^ i) == 1 && pos > 0 {
-        None
-    } else {
-        Some(
-            // here the localdata is filtered
-            // to remove the parity bits
-            localdata
-                .iter()
-                .enumerate()
-                .filter_map(|(num, bit)| {
-                    if [0, 1, 2, 4, 8].contains(&num) {
-                        None
-                    } else {
-                        Some(bit)
-                    }
-                })
-                .map(|x| *x)
-                .collect(),
-        )
+        println!("two errors");
     }
+    // here the localdata is filtered
+    // to remove the parity bits
+    localdata
+        .iter()
+        .enumerate()
+        .filter_map(|(num, bit)| {
+            if [0, 1, 2, 4, 8].contains(&num) {
+                None
+            } else {
+                Some(bit)
+            }
+        })
+        .map(|x| *x)
+        .collect()
 }
 
 /// encode a bytes object.
-/// TODO: change to Vec<u8>
 pub fn encode(data: Vec<u8>) -> Vec<[u8; 2]> {
-    let convert = |rest: &mut Vec<u8>| {
+    let encode_11 = |rest: &mut Vec<u8>| {
         encode_block(
             (&(rest.drain(0..11).collect::<Vec<u8>>())[..])
                 .try_into()
@@ -107,11 +103,11 @@ pub fn encode(data: Vec<u8>) -> Vec<[u8; 2]> {
     let (mut rest, mut output) =
         data.iter()
             .fold((Vec::new(), Vec::new()), |(mut rest, mut output), elem| {
-                for i in 0..8 {
-                    rest.push((elem >> (7 - i)) & 1);
-                }
+                // map 0-8 to the bits of elem, append to end of rest
+                rest.append(&mut (0..8).map(|i| ((elem) >> (7 - i)) & 1).collect());
+                // if rest is more than a block, encode it
                 if rest.len() >= 11 {
-                    output.push(convert(&mut rest))
+                    output.push(encode_11(&mut rest))
                 }
                 (rest, output)
             });
@@ -121,40 +117,34 @@ pub fn encode(data: Vec<u8>) -> Vec<[u8; 2]> {
         while rest.len() < 11 {
             rest.push(0);
         }
-        output.push(convert(&mut rest))
+        output.push(encode_11(&mut rest))
     }
 
     output
 }
 
 /// decodes a vector of byte-tuples into a proper byte vector
-pub fn decode(data: Vec<[u8; 2]>) -> Result<Vec<u8>, Vec<u8>> {
-    let mut bytes = Vec::new();
+pub fn decode(data: Vec<[u8; 2]>) -> Vec<u8> {
+    let get_byte = |rest: &mut Vec<u8>| rest.drain(0..8).fold(0, |byte, bit| (byte << 1) | bit);
 
-    let mut iter = 0;
-
-    for i in 0..data.len() {
-        // try to decode the block.
-        // if not, empty vector, the byte is skipped.
-        if let Some(block) = decode_block(&data[i]) {
-            for bit in block {
-                // bitwise and of 2^n - 1 is the same as mod(2^n)
-                if iter & 7 == 0 {
-                    bytes.push(0);
+    let (mut rest, mut output) =
+        data.iter()
+            .fold((Vec::new(), Vec::new()), |(mut rest, mut output), elem| {
+                rest.append(&mut decode_block(elem));
+                while rest.len() > 8 {
+                    output.push(get_byte(&mut rest));
                 }
+                (rest, output)
+            });
 
-                let (idx, off) = split(iter);
-
-                bytes[idx] |= (bit & 1) << off;
-
-                iter += 1;
-            }
-        } else {
-            return Err(bytes);
+    if rest.len() > 0 {
+        while rest.len() < 8 {
+            rest.push(0);
         }
+        output.push(get_byte(&mut rest));
     }
 
-    Ok(bytes)
+    output
 }
 
 #[cfg(test)]
@@ -166,7 +156,7 @@ mod tests {
         let c = [1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1];
         let code = encode_block(&c);
         assert_eq!(code, [0b00111100, 0b01101001]);
-        assert_eq!(decode_block(&code).unwrap(), c);
+        assert_eq!(decode_block(&code), c);
     }
 
     #[test]
@@ -175,7 +165,7 @@ mod tests {
         let mut code = encode_block(&c);
         assert_eq!(code, [0b00111100, 0b01101001]);
         code[0] ^= 0b00001000;
-        assert_eq!(decode_block(&code).unwrap(), c);
+        assert_eq!(decode_block(&code), c);
     }
 
     #[test]
@@ -185,13 +175,13 @@ mod tests {
         assert_eq!(code, [0b00111100, 0b01101001]);
         code[0] ^= 0b00001000;
         code[1] ^= 0b00100000;
-        assert_eq!(decode_block(&code), None);
+        assert!(decode_block(&code) != c);
     }
 
     #[test]
     fn test_stream() {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
         let bytes = b"hello motherfucker";
         let encoded = encode(bytes.to_vec());
         println!("{:?}", encoded);
@@ -218,8 +208,7 @@ mod tests {
                     b
                 })
                 .collect(),
-        )
-        .expect("To many errors to correct!");
+        );
         // all this doo dad to remove the zero that is at the end.
         let b: Vec<u8> = decoded
             .iter()
