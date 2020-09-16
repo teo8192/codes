@@ -69,6 +69,75 @@ fn compress_block(data: &[u8; 16]) -> [u8; 2] {
     res
 }
 
+struct Bytes<'a> {
+    bytes: &'a [u8],
+}
+
+struct BytesIterator<'a, 'b> {
+    bytes: &'a Bytes<'b>,
+    pos: usize,
+}
+
+impl<'a> Bytes<'a> {
+    fn new(bytes: &[u8]) -> Bytes {
+        Bytes { bytes }
+    }
+
+    fn iter(&self) -> BytesIterator {
+        BytesIterator {
+            bytes: &self,
+            pos: 0,
+        }
+    }
+}
+
+impl<'a, 'b> Iterator for BytesIterator<'a, 'b> {
+    type Item = u8;
+    fn next(&mut self) -> Option<Self::Item> {
+        let byte = self.pos >> 3;
+        let offset: usize = self.pos & 7;
+        if byte >= self.bytes.bytes.len() {
+            return None;
+        }
+        self.pos += 1;
+        Some(if self.bytes.bytes[byte] & 2u8.pow(offset as u32) > 0 {
+            1
+        } else {
+            0
+        })
+    }
+}
+
+fn encode(data: Bytes) -> Vec<[u8; 2]> {
+    let mut byte_stream = data.iter();
+    let mut out = Vec::new();
+    let mut b = [0u8; 11];
+    let mut end = false;
+    let mut iterations = 0;
+    while !end {
+        let mut i = 0;
+        while let Some(bit) = byte_stream.next() {
+            b[i] = bit;
+            i += 1;
+            if i >= 11 {
+                break;
+            }
+        }
+        while i < 11 {
+            b[i] = 0;
+            i += 1;
+            end = true;
+        }
+
+        out.push(compress_block(&encode_block(&b)));
+        iterations += 1;
+    }
+
+    println!("{}", iterations);
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,5 +157,13 @@ mod tests {
         let block = [1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0];
         let compressed = compress_block(&block);
         assert_eq!(compressed, [0b11010100, 0b11101000])
+    }
+
+    #[test]
+    fn test_stream() {
+        let bytes = b"hello motherfucker";
+        let encoded = encode(Bytes::new(bytes));
+        println!("{:?}", encoded);
+        assert!(false);
     }
 }
