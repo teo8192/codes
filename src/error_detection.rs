@@ -1,4 +1,4 @@
-pub fn encode_block(data: &[u8; 11]) -> [u8; 16] {
+fn encode_block(data: &[u8; 11]) -> [u8; 16] {
     let mut encoded = [0u8; 16];
     let mut c = 0;
 
@@ -23,7 +23,7 @@ pub fn encode_block(data: &[u8; 11]) -> [u8; 16] {
     encoded
 }
 
-pub fn decode_block(data: &[u8; 16]) -> Vec<u8> {
+fn decode_block(data: &[u8; 16]) -> Vec<u8> {
     let mut localdata: [u8; 16] = [0; 16];
     for (i, bit) in data.iter().enumerate() {
         localdata[i] = *bit;
@@ -57,15 +57,36 @@ pub fn decode_block(data: &[u8; 16]) -> Vec<u8> {
         .collect()
 }
 
+fn compress_block(data: &[u8; 16]) -> [u8; 2] {
+    let mut res = [0u8; 2];
+
+    for i in 0..16 {
+        let idx = if i & 0b1000 > 0 { 1 } else { 0 };
+        res[idx] <<= 1;
+        res[idx] |= data[i];
+    }
+
+    res
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn hamming_codes() {
+    fn code_block() {
         let c = [1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0];
-        let mut code = super::encode_block(&c);
+        let mut code = encode_block(&c);
         assert_eq!(code, [1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0]);
         code[1] ^= 1;
-        let decoded = super::decode_block(&code);
+        let decoded = decode_block(&code);
         assert_eq!(decoded, c);
+    }
+
+    #[test]
+    fn block_compression() {
+        let block = [1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0];
+        let compressed = compress_block(&block);
+        assert_eq!(compressed, [0b11010100, 0b11101000])
     }
 }
