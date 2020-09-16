@@ -113,7 +113,6 @@ fn encode(data: Bytes) -> Vec<[u8; 2]> {
     let mut out = Vec::new();
     let mut b = [0u8; 11];
     let mut end = false;
-    let mut iterations = 0;
     while !end {
         let mut i = 0;
         while let Some(bit) = byte_stream.next() {
@@ -130,10 +129,7 @@ fn encode(data: Bytes) -> Vec<[u8; 2]> {
         }
 
         out.push(compress_block(&encode_block(&b)));
-        iterations += 1;
     }
-
-    println!("{}", iterations);
 
     out
 }
