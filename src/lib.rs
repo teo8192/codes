@@ -3,6 +3,7 @@ extern crate test;
 
 extern crate rayon;
 
+mod error_detection;
 mod prime;
 
 #[cfg(test)]
