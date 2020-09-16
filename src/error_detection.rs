@@ -190,7 +190,8 @@ mod tests {
 
     #[test]
     fn test_stream() {
-        use std::hash::{Hash, Hasher, SipHasher};
+        use std::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
         let bytes = b"hello motherfucker";
         let encoded = encode(bytes.to_vec());
         println!("{:?}", encoded);
@@ -202,12 +203,12 @@ mod tests {
                     // flip a bit of every other byte. See how you like them apples.
 
                     // use a has to get a pseudorandom bit
-                    let mut hasher = SipHasher::new();
+                    let mut hasher = DefaultHasher::new();
                     n.hash(&mut hasher);
                     bytes.hash(&mut hasher);
                     let mut k = hasher.finish() as usize;
                     let idx = k & 1;
-                    // k >>= 1;
+                    k >>= 1;
 
                     let mut b = [0; 2];
 
