@@ -2,7 +2,7 @@ fn encode_block(data: &[u8; 11]) -> [u8; 16] {
     let mut encoded = [0u8; 16];
     let mut c = 0;
 
-    for i in 0..15 {
+    for i in 0..16 {
         if ![0, 1, 2, 4, 8].contains(&i) {
             encoded[i] = data[c];
             c += 1;
@@ -69,6 +69,21 @@ fn compress_block(data: &[u8; 16]) -> [u8; 2] {
     res
 }
 
+fn extract_block(data: &[u8; 2]) -> [u8; 16] {
+    let mut res = [0u8; 16];
+
+    for i in 0..16 {
+        let idx = if i & 0b1000 > 0 { 1 } else { 0 };
+        res[i] = if data[idx] & 2u8.pow(7 - (i & 7) as u32) > 0 {
+            1
+        } else {
+            0
+        };
+    }
+
+    res
+}
+
 struct Bytes<'a> {
     bytes: &'a [u8],
 }
@@ -95,7 +110,7 @@ impl<'a, 'b> Iterator for BytesIterator<'a, 'b> {
     type Item = u8;
     fn next(&mut self) -> Option<Self::Item> {
         let byte = self.pos >> 3;
-        let offset: usize = self.pos & 7;
+        let offset: usize = 7 - (self.pos & 7);
         if byte >= self.bytes.bytes.len() {
             return None;
         }
@@ -113,6 +128,7 @@ fn encode(data: Bytes) -> Vec<[u8; 2]> {
     let mut out = Vec::new();
     let mut b = [0u8; 11];
     let mut end = false;
+
     while !end {
         let mut i = 0;
         while let Some(bit) = byte_stream.next() {
@@ -134,15 +150,43 @@ fn encode(data: Bytes) -> Vec<[u8; 2]> {
     out
 }
 
+fn decode(data: Vec<[u8; 2]>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+
+    let mut iter = 0;
+
+    for i in 0..data.len() {
+        let b = extract_block(&data[i]);
+        let block = decode_block(&b);
+
+        for bit in block {
+            if iter & 7 == 0 {
+                bytes.push(0);
+            }
+
+            let byte = iter >> 3;
+            let offset = 7 - (iter & 7);
+
+            if bit > 0 {
+                bytes[byte] |= 2u8.pow(offset as u32);
+            }
+
+            iter += 1;
+        }
+    }
+
+    bytes
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn code_block() {
-        let c = [1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0];
+        let c = [1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1];
         let mut code = encode_block(&c);
-        assert_eq!(code, [1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0]);
+        assert_eq!(code, [0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1]);
         code[1] ^= 1;
         let decoded = decode_block(&code);
         assert_eq!(decoded, c);
@@ -159,7 +203,17 @@ mod tests {
     fn test_stream() {
         let bytes = b"hello motherfucker";
         let encoded = encode(Bytes::new(bytes));
-        println!("{:?}", encoded);
-        assert!(false);
+        let decoded = decode(encoded);
+        let b: Vec<u8> = decoded
+            .iter()
+            .rev()
+            .skip_while(|x| **x == 0)
+            .map(|x| *x)
+            .collect::<Vec<u8>>()
+            .iter()
+            .map(|x| *x)
+            .rev()
+            .collect();
+        assert_eq!(b, bytes);
     }
 }
