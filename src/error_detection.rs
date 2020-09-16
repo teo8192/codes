@@ -96,6 +96,12 @@ fn decode_block(data: &[u8; 2]) -> Option<Vec<u8>> {
 /// encode a bytes object.
 /// TODO: change to Vec<u8>
 pub fn encode(data: Vec<u8>) -> Vec<[u8; 2]> {
+    let convert = |rest: &mut Vec<u8>| encode_block(
+                        (&(rest.drain(0..11).collect::<Vec<u8>>())[..])
+                            .try_into()
+                            .expect("wrong length?!?"),
+                    );
+
     let (mut rest, mut output) =
         data.iter()
             .fold((Vec::new(), Vec::new()), |(mut rest, mut output), elem| {
@@ -103,24 +109,17 @@ pub fn encode(data: Vec<u8>) -> Vec<[u8; 2]> {
                     rest.push((elem >> (7 - i)) & 1);
                 }
                 if rest.len() >= 11 {
-                    output.push(encode_block(
-                        (&(rest.drain(0..11).collect::<Vec<u8>>())[..])
-                            .try_into()
-                            .expect("wrong length?!?"),
-                    ))
+                    output.push(convert(&mut rest))
                 }
                 (rest, output)
             });
 
+    // if rest is not drained, pad with zeroes and push to output.
     if rest.len() > 0 {
         while rest.len() < 11 {
             rest.push(0);
         }
-        output.push(encode_block(
-            (&(rest.drain(0..11).collect::<Vec<u8>>())[..])
-                .try_into()
-                .expect("wrong length?!?"),
-        ))
+        output.push(convert(&mut rest))
     }
 
     output
