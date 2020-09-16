@@ -124,20 +124,34 @@ pub fn encode(data: Vec<u8>) -> Vec<[u8; 2]> {
 }
 
 /// decodes a vector of byte-tuples into a proper byte vector
+/// Might return trailing zeros
 pub fn decode(data: Vec<[u8; 2]>) -> Vec<u8> {
+    // drain a 8 bits and collect to a byte
     let get_byte = |rest: &mut Vec<u8>| rest.drain(0..8).fold(0, |byte, bit| (byte << 1) | bit);
 
     let (mut rest, mut output) =
         data.iter()
             .fold((Vec::new(), Vec::new()), |(mut rest, mut output), elem| {
+                // append all decoded bytes
                 rest.append(&mut decode_block(elem));
+                // this could also be folded I guess
                 while rest.len() > 8 {
                     output.push(get_byte(&mut rest));
                 }
                 (rest, output)
             });
 
-    if rest.len() > 0 {
+    // if there is anything left that is not
+    // trailing zeros, convert.
+    if rest
+        .iter()
+        .map(|x| *x)
+        .filter(|x| *x != 0)
+        .collect::<Vec<u8>>()
+        .len()
+        > 0
+    {
+        // possibly pad with zeros
         while rest.len() < 8 {
             rest.push(0);
         }
