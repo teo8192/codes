@@ -85,6 +85,8 @@ impl<'a> PrimeGenerator<'a> {
             .unwrap()
     }
 
+    // return a pseudo-prime p of the given size,
+    // where p - 1 has no factors of the first 1000 primes (except 2 ofc)
     pub fn rsa_prime(size: usize, rng: &mut rand::rngs::ThreadRng) -> BigUint {
         let sieve: Vec<u32> = Primes::new().skip(1).take(1000).collect();
         std::iter::repeat(
