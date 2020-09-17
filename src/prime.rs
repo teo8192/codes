@@ -39,6 +39,7 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
     let mut rng = rand::thread_rng();
 
     'witness: for _ in 0..rounds {
+        // at least 75% chance of finding a witness
         let a: BigUint = rng.gen_biguint_range(&two, &(&number - &two));
         let mut x = a.modpow(&d, &number);
 
@@ -48,6 +49,9 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
 
         for _ in 0..s - 1 {
             x = x.modpow(&two, &number);
+            // break since 1^a=1 (mod n) forall a>=0,n>1
+            // Then the test will not fail, and number is definetly
+            // composite
             if x == one {
                 break;
             } else if x == &number - &one {
@@ -62,12 +66,12 @@ fn rabin_miller(number: BigUint, rounds: u32) -> Option<BigUint> {
 
 #[derive(Debug)]
 pub struct PrimeGenerator<'a> {
-    size: u32,
+    size: usize,
     rng: &'a mut rand::rngs::ThreadRng,
 }
 
 impl<'a> PrimeGenerator<'a> {
-    pub fn new<'b>(size: u32, rng: &'b mut rand::rngs::ThreadRng) -> PrimeGenerator<'b> {
+    pub fn new<'b>(size: usize, rng: &'b mut rand::rngs::ThreadRng) -> PrimeGenerator<'b> {
         PrimeGenerator { size, rng }
     }
 
@@ -80,19 +84,24 @@ impl<'a> PrimeGenerator<'a> {
             .next()
             .unwrap()
     }
+
+    pub fn rsa_prime(size: usize, rng: &mut rand::rngs::ThreadRng) -> BigUint {
+        std::iter::repeat(
+            rng.gen_biguint_range(&(big(1) << (size - 1)), &(big(1) << size))
+                | 1.to_biguint().unwrap(), // make sure is odd
+        )
+        .enumerate()
+        .map(|(n, num)| num + big((n as u32) << 1)) // only take odd numbers
+        .filter_map(|n| rabin_miller(n, 7))
+        .next()
+        .unwrap()
+    }
 }
 
 impl<'a> Iterator for PrimeGenerator<'a> {
     type Item = BigUint;
     fn next(&mut self) -> Option<BigUint> {
-        let mut num = self
-            .rng
-            .gen_biguint_range(&(big(1) << self.size - 1), &(big(1) << self.size));
-        if &num & &big(1) == big(0) {
-            num += big(1);
-        }
-
-        Some(self.prime_after(num))
+        Some(PrimeGenerator::rsa_prime(self.size, self.rng))
     }
 }
 
