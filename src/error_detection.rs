@@ -1,3 +1,4 @@
+use rand_core::RngCore;
 use std::convert::TryInto;
 
 /// if i is a bit-index, then this
@@ -192,11 +193,9 @@ mod tests {
         assert!(decode_block(&code) != c);
     }
 
-    #[test]
-    fn test_stream() {
+    fn run_stream_test(bytes: &mut Vec<u8>) {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        let bytes = b"hello motherfucker";
         let encoded = encode(bytes.to_vec());
         println!("{:?}", encoded);
         let decoded = decode(
@@ -234,6 +233,18 @@ mod tests {
             .map(|x| *x)
             .rev()
             .collect();
-        assert_eq!(b, bytes);
+        assert_eq!(&b, bytes);
+    }
+
+    #[test]
+    fn test_stream() {
+        run_stream_test(&mut b"hello motherfucker".to_vec());
+        let limit = 8192;
+        let mut rng = rand::thread_rng();
+        for i in 0..limit {
+            let mut v = Vec::with_capacity(i);
+            rng.fill_bytes(&mut v[..]);
+            run_stream_test(&mut v)
+        }
     }
 }
