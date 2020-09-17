@@ -86,6 +86,7 @@ impl<'a> PrimeGenerator<'a> {
     }
 
     pub fn rsa_prime(size: usize, rng: &mut rand::rngs::ThreadRng) -> BigUint {
+        let sieve: Vec<u32> = Primes::new().skip(1).take(1000).collect();
         std::iter::repeat(
             rng.gen_biguint_range(&(big(1) << (size - 1)), &(big(1) << size))
                 | 1.to_biguint().unwrap(), // make sure is odd
@@ -93,6 +94,14 @@ impl<'a> PrimeGenerator<'a> {
         .enumerate()
         .map(|(n, num)| num + big((n as u32) << 1)) // only take odd numbers
         .filter_map(|n| rabin_miller(n, 7))
+        .filter(|n| {
+            for i in sieve.iter() {
+                if (n - 1.to_biguint().unwrap()) % i == 0.to_biguint().unwrap() {
+                    return false;
+                }
+            }
+            true
+        })
         .next()
         .unwrap()
     }
@@ -101,7 +110,18 @@ impl<'a> PrimeGenerator<'a> {
 impl<'a> Iterator for PrimeGenerator<'a> {
     type Item = BigUint;
     fn next(&mut self) -> Option<BigUint> {
-        Some(PrimeGenerator::rsa_prime(self.size, self.rng))
+        Some(
+            std::iter::repeat(
+                self.rng
+                    .gen_biguint_range(&(big(1) << (self.size - 1)), &(big(1) << self.size))
+                    | 1.to_biguint().unwrap(), // make sure is odd
+            )
+            .enumerate()
+            .map(|(n, num)| num + big((n as u32) << 1)) // only take odd numbers
+            .filter_map(|n| rabin_miller(n, 7))
+            .next()
+            .unwrap(),
+        )
     }
 }
 

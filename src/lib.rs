@@ -8,6 +8,7 @@ extern crate test;
 /// Might also look at more shit on the way.
 extern crate rayon;
 
+pub mod cryptography;
 pub mod error_detection;
 pub mod number_theory;
 pub mod prime;
