@@ -104,7 +104,7 @@ pub fn encode(data: Vec<u8>) -> Vec<[u8; 2]> {
     let (mut rest, mut output) =
         data.iter()
             .fold((Vec::new(), Vec::new()), |(mut rest, mut output), elem| {
-                // map 0-8 to the bits of elem, append to end of rest
+                // extract the bits of this byte
                 rest.append(&mut (0..8).map(|i| ((elem) >> (7 - i)) & 1).collect());
                 // if rest is more than a block, encode it
                 if rest.len() >= 11 {
