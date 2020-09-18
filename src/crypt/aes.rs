@@ -178,18 +178,26 @@ impl Block {
     }
 }
 
+/// The specification of the key length
 pub enum AESKeySize {
     AES128,
     AES192,
     AES256,
 }
 
+/// The key AES key.
+/// only contains the generated round key and number of rounds,
+/// the rest (e.g. original key, number of rounds etc) seemed
+/// to not be useful.
 pub struct AES {
     w: Vec<u8>,
     nr: usize,
 }
 
 impl AES {
+    /// Initialize the AES-thingy with the specified key.
+    /// The key needs to be exactly the correct size,
+    /// e.g. if you want 128, use exactly 16 bytes, 24 for 192, 32 for 256
     pub fn new(key: &[u8], key_size: AESKeySize) -> Result<AES, &str> {
         use AESKeySize::*;
         let ks = match &key_size {

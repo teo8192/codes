@@ -1,5 +1,7 @@
 use num_bigint::{BigInt, BigUint, ToBigInt, ToBigUint};
 
+/// Find the inverse using the euclidian algorithm.
+/// Todo: make generic or something?
 pub fn inverse(a: BigUint, modulus: BigUint) -> Option<BigUint> {
     if modulus == 0.to_biguint().unwrap() || a == 0.to_biguint().unwrap() {
         return None;
