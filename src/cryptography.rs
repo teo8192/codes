@@ -1,5 +1,7 @@
 use num_bigint::{BigUint, ToBigUint};
 
+use std::ops::BitXorAssign;
+
 use crate::number_theory::inverse;
 use crate::prime::PrimeGenerator;
 
@@ -166,16 +168,29 @@ struct Block {
     data: Box<[u8; 16]>,
 }
 
+impl BitXorAssign for Block {
+    fn bitxor_assign(&mut self, other: Block) {
+        for i in 0..16 {
+            self.data[i] ^= other.data[i];
+        }
+    }
+}
+
 impl Block {
-    fn new<T: Iterator<Item=u8> + ExactSizeIterator>(bytes: T) -> Self {
-        assert!(bytes.len() == 16);
+    pub fn new(bytes: &[u8; 16]) -> Self {
+        // assert!(bytes.len() <= 16);
+        // TODO: pad block
         let mut data = Box::new([0u8; 16]);
-        for (n, b) in bytes.enumerate() {
-            data[n] = b;
+        for i in 0..16 {
+            data[i] = bytes[i];
         }
 
+        Block { data }
+    }
+
+    pub fn empty() -> Self {
         Block {
-            data
+            data: Box::new([0u8; 16]),
         }
     }
 
@@ -254,12 +269,15 @@ impl Block {
         let s = self.data.clone();
         let get_col_idx = |c, idx| s[c + idx as usize * 4];
         let mut col = [0u8; 4];
-        let matrix = if inverse { [ 0xe, 0xb, 0xd, 0x9 ] } else { [ 2, 3, 1, 1 ] };
+        let matrix = if inverse {
+            [0xe, 0xb, 0xd, 0x9]
+        } else {
+            [2, 3, 1, 1]
+        };
         for c in 0..4 {
             for i in 0..4 {
                 let idx = 4 - i;
-                self.data[c + i * 4] = 
-                      Block::multiply_bytes(matrix[idx & 3], get_col_idx(c, 0))
+                self.data[c + i * 4] = Block::multiply_bytes(matrix[idx & 3], get_col_idx(c, 0))
                     ^ Block::multiply_bytes(matrix[(idx + 1) & 3], get_col_idx(c, 1))
                     ^ Block::multiply_bytes(matrix[(idx + 2) & 3], get_col_idx(c, 2))
                     ^ Block::multiply_bytes(matrix[(idx + 3) & 3], get_col_idx(c, 3));
@@ -278,48 +296,59 @@ impl Block {
             self.data[i] = tmp[i];
         }
     }
-
 }
 
-struct AES256 {
-    key: [u8; 32],
+enum AESKeySize {
+    aes128,
+    aes192,
+    aes256,
 }
 
-impl AES256 {
-    const number_rounds: usize = 14;
+struct AES<'a> {
+    key: &'a [u8],
+    w: Vec<u8>,
+    key_size: AESKeySize,
+    nr: usize,
+}
 
-    fn cipher(mut input: Block, w: &[u8; 16 * (AES256::number_rounds + 1)]) -> Block {
-        input.transpose();
-        // let mut state = transpose(&input);
-        use std::convert::TryInto;
+impl<'a> AES<'a> {
+    pub fn new(key: &'a [u8], key_size: AESKeySize) -> Result<AES, &str> {
+        use AESKeySize::*;
+        let ks = match &key_size {
+            aes128 => 128,
+            aes192 => 192,
+            aes256 => 256,
+        };
 
-        input.add_round_key(&w[0..(4 * 4)].try_into().expect("Wrong length"));
-
-        for round in 1..AES256::number_rounds {
-            input.sub_bytes(false);
-            input.shift_rows(false);
-            input.mix_columns(false);
-            input.add_round_key(
-                &w[(round * 16)..((round + 1) * 16)]
-                    .try_into()
-                    .expect("Wrong length"),
-            );
+        if key.len() != (ks >> 3) {
+            println!("{} {}", key.len(), ks);
+            return Err("Key size does not match");
         }
+        let nr = match &key_size {
+            aes128 => 10,
+            aes192 => 12,
+            aes256 => 14,
+        };
 
-        input.sub_bytes(false);
-        input.shift_rows(false);
-        input.add_round_key(
-            &w[(AES256::number_rounds * 16)..((AES256::number_rounds + 1) * 16)]
-                .try_into()
-                .expect("Wrong length"),
-        );
+        let nk = match &key_size {
+            aes128 => 4,
+            aes192 => 6,
+            aes256 => 8,
+        };
 
-        input.transpose();
+        // 16 = 4 * Nb
+        let mut w = vec![0u8; 16 * (nr + 1)];
+        AES::key_expansion(&key, &mut w, nk, nr);
 
-        input
+        Ok(AES {
+            key,
+            w,
+            key_size,
+            nr,
+        })
     }
 
-    fn key_expansion(key: &[u8; 32], w: &mut [u8; 16 * (AES256::number_rounds + 1)], nk: usize) {
+    fn key_expansion(key: &[u8], w: &mut Vec<u8>, nk: usize, nr: usize) {
         fn subword(a: &[u8; 4]) -> [u8; 4] {
             let mut bytes = [0u8; 4];
             for i in 0..4 {
@@ -357,7 +386,7 @@ impl AES256 {
         }
 
         let mut rc = 1;
-        for i in (nk as usize)..(4 * (AES256::number_rounds + 1)) {
+        for i in (nk as usize)..(4 * (nr + 1)) {
             for j in 0..4 {
                 tmp[j as usize] = w[((i - 1) * 4 + j) as usize];
             }
@@ -378,20 +407,56 @@ impl AES256 {
         }
     }
 
-    fn inv_cipher(mut input: Block, w: &[u8; 16 * (AES256::number_rounds + 1)]) -> Block {
+    pub fn cipher(&self, mut input: Block, iv: Block) -> Block {
+        input ^= iv;
+
         input.transpose();
+        // let mut state = transpose(&input);
         use std::convert::TryInto;
 
-        input.add_round_key(&w[(AES256::number_rounds * 16)..((AES256::number_rounds + 1) * 16)]
+        input.add_round_key(&self.w[0..(4 * 4)].try_into().expect("Wrong length"));
+
+        for round in 1..self.nr {
+            input.sub_bytes(false);
+            input.shift_rows(false);
+            input.mix_columns(false);
+            input.add_round_key(
+                &self.w[(round * 16)..((round + 1) * 16)]
+                    .try_into()
+                    .expect("Wrong length"),
+            );
+        }
+
+        input.sub_bytes(false);
+        input.shift_rows(false);
+        input.add_round_key(
+            &self.w[(self.nr * 16)..((self.nr + 1) * 16)]
                 .try_into()
                 .expect("Wrong length"),
         );
 
-        for round in (1..AES256::number_rounds).rev() {
+        input.transpose();
+
+        input
+    }
+
+    pub fn inv_cipher(&self, mut input: Block, iv: Block) -> Block {
+        input ^= iv;
+
+        input.transpose();
+        use std::convert::TryInto;
+
+        input.add_round_key(
+            &self.w[(self.nr * 16)..((self.nr + 1) * 16)]
+                .try_into()
+                .expect("Wrong length"),
+        );
+
+        for round in (1..self.nr).rev() {
             input.shift_rows(true);
             input.sub_bytes(true);
             input.add_round_key(
-                &w[(round * 16)..((round + 1) * 16)]
+                &self.w[(round * 16)..((round + 1) * 16)]
                     .try_into()
                     .expect("Wrong length"),
             );
@@ -400,7 +465,7 @@ impl AES256 {
 
         input.shift_rows(true);
         input.sub_bytes(true);
-        input.add_round_key(&w[0..16].try_into().expect("Wrong length"));
+        input.add_round_key(&self.w[0..16].try_into().expect("Wrong length"));
 
         input.transpose();
 
@@ -451,8 +516,8 @@ mod tests {
             0x77, 0x81, 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3,
             0x09, 0x14, 0xdf, 0xf4,
         ];
-        let mut w = [0u8; 240];
-        AES256::key_expansion(&key, &mut w, 8);
+        let mut w = vec![0u8; 240];
+        AES::key_expansion(&key, &mut w, 8, 14);
 
         let expected = [
             0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d,
@@ -476,14 +541,13 @@ mod tests {
             0x09, 0x14, 0xdf, 0xf4,
         ];
 
-        let mut w = [0u8; 240];
-        AES256::key_expansion(&key, &mut w, 8);
+        let aes = AES::new(&key, AESKeySize::aes256).unwrap();
 
         let content = b"hello motherfuck";
 
-        let c = AES256::cipher(Block::new(content.iter().map(|x|*x)), &w);
+        let c = aes.cipher(Block::new(&content), Block::empty());
         println!("{:?}", c.to_bytes());
-        let d = AES256::inv_cipher(c, &w);
+        let d = aes.inv_cipher(c, Block::empty());
         println!("{:?}", d.to_bytes());
         assert_eq!(d.to_bytes(), content, "decryption faliure");
     }
@@ -500,17 +564,15 @@ mod tests {
             0x1c, 0x1d, 0x1e, 0x1f,
         ];
 
-        let mut w = [0u8; 240];
-        AES256::key_expansion(&key, &mut w, 8);
-
-        let c = AES256::cipher(Block::new(plaintext.iter().map(|x| *x)), &w);
+        let aes = AES::new(&key, AESKeySize::aes256).unwrap();
+        let c = aes.cipher(Block::new(&plaintext), Block::empty());
         println!("{:?}", c.to_bytes());
         let output = [
             0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf, 0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49,
             0x60, 0x89,
         ];
         assert_eq!(c.to_bytes(), output, "encryption faliure");
-        let d = AES256::inv_cipher(c, &w);
+        let d = aes.inv_cipher(c, Block::empty());
         println!("{:?}", d.to_bytes());
         assert_eq!(d.to_bytes(), plaintext, "decryption faliure");
     }
