@@ -36,31 +36,11 @@ const INV_S_BOX: [u8; 256] = [
     0xfb, 0xcb, 0x4e, 0x25, 0x92, 0x84, 0x06, 0x6b, 0x73, 0x6e, 0x1b, 0xf4, 0x5f, 0xef, 0x61, 0x7d,
 ];
 
-fn print_box(b: &[u8; 16]) {
-    for x in 0..4 {
-        for y in 0..4 {
-            print!("{:02x}", b[x + y * 4]);
-        }
-    }
-    println!("");
-}
-
-
-fn transpose(input: &[u8; 16]) -> [u8; 16] {
-    let mut out = [0u8; 16];
-    for x in 0..4 {
-        for y in 0..4 {
-            out[x + y * 4] = input[y + x * 4];
-        }
-    }
-
-    out
-}
-
 struct Block {
     data: Box<[u8; 16]>,
 }
 
+#[allow(dead_code)]
 impl Block {
     pub fn new(bytes: &[u8; 16]) -> Self {
         // assert!(bytes.len() <= 16);
@@ -167,7 +147,6 @@ impl Block {
     fn mix_columns(&mut self, inverse: bool) {
         let s = self.data.clone();
         let get_col_idx = |c, idx| s[c + idx as usize * 4];
-        let mut col = [0u8; 4];
 
         // this is a matrix where each row is shifted once from the row above
         let matrix = if inverse {
@@ -200,25 +179,23 @@ impl Block {
 }
 
 pub enum AESKeySize {
-    aes128,
-    aes192,
-    aes256,
+    AES128,
+    AES192,
+    AES256,
 }
 
-pub struct AES<'a> {
-    key: &'a [u8],
+pub struct AES {
     w: Vec<u8>,
-    key_size: AESKeySize,
     nr: usize,
 }
 
-impl<'a> AES<'a> {
-    pub fn new(key: &'a [u8], key_size: AESKeySize) -> Result<AES, &str> {
+impl AES {
+    pub fn new(key: &[u8], key_size: AESKeySize) -> Result<AES, &str> {
         use AESKeySize::*;
         let ks = match &key_size {
-            aes128 => 128,
-            aes192 => 192,
-            aes256 => 256,
+            AES128 => 128,
+            AES192 => 192,
+            AES256 => 256,
         };
 
         if key.len() != (ks >> 3) {
@@ -226,27 +203,22 @@ impl<'a> AES<'a> {
             return Err("Key size does not match");
         }
         let nr = match &key_size {
-            aes128 => 10,
-            aes192 => 12,
-            aes256 => 14,
+            AES128 => 10,
+            AES192 => 12,
+            AES256 => 14,
         };
 
         let nk = match &key_size {
-            aes128 => 4,
-            aes192 => 6,
-            aes256 => 8,
+            AES128 => 4,
+            AES192 => 6,
+            AES256 => 8,
         };
 
         // 16 = 4 * Nb
         let mut w = vec![0u8; 16 * (nr + 1)];
         AES::key_expansion(&key, &mut w, nk, nr);
 
-        Ok(AES {
-            key,
-            w,
-            key_size,
-            nr,
-        })
+        Ok(AES { w, nr })
     }
 
     fn key_expansion(key: &[u8], w: &mut Vec<u8>, nk: usize, nr: usize) {
@@ -376,28 +348,31 @@ impl<'a> AES<'a> {
     pub fn encrypt(&self, plaintext: &Vec<u8>) -> Vec<u8> {
         let tmp = Block::empty();
 
-        let (mut rest, mut encrypted) = plaintext.iter().fold(
-            (Vec::new(), Vec::new()),
-            |(mut rest, mut encrypted), byte| {
-                rest.push(*byte);
-                // 16 is blocksize
+        let encrypt_block =
+            |mut rest: Vec<u8>, mut encrypted: Vec<Block>| -> (Vec<u8>, Vec<Block>) {
                 if rest.len() >= 16 {
                     let iv = if encrypted.len() == 0 {
                         &tmp
                     } else {
                         &encrypted[encrypted.len() - 1]
                     };
-                    let k = Block::from_vec(rest.drain(0..16).collect());
-                    print!("IV: ");
-                    print_box(&*iv.data);
-                    print!("ME: ");
-                    print_box(&*k.data);
-                    encrypted.push(self.cipher(k, iv));
-                    print!("CI: ");
-                    print_box(&*encrypted[encrypted.len() - 1].data);
+                    // in two lines to avoid borrowing issues
+                    // iv is borrowing ecryptison immutably,
+                    // and encryption.push borrows mutably.
+                    // this creates two burrows, ooops.
+                    let cipher = self.cipher(Block::from_vec(rest.drain(0..16).collect()), iv);
+                    encrypted.push(cipher);
                 }
 
                 (rest, encrypted)
+            };
+
+        let (mut rest, mut encrypted) = plaintext.iter().fold(
+            (Vec::new(), Vec::new()),
+            |(mut rest, encrypted): (Vec<u8>, Vec<Block>), byte| {
+                rest.push(*byte);
+                // 16 is blocksize
+                encrypt_block(rest, encrypted)
             },
         );
 
@@ -406,13 +381,7 @@ impl<'a> AES<'a> {
                 rest.push(0);
             }
 
-            let iv = if encrypted.len() == 0 {
-                &tmp
-            } else {
-                &encrypted[encrypted.len() - 1]
-            };
-            let k = Block::from_vec(rest.drain(0..16).collect());
-            encrypted.push(self.cipher(k, iv));
+            encrypted = encrypt_block(rest, encrypted).1;
         }
 
         encrypted
@@ -423,9 +392,6 @@ impl<'a> AES<'a> {
     }
 
     pub fn decrypt(&self, ciphertext: &Vec<u8>) -> Vec<u8> {
-        let tmp = Block::empty();
-        println!("======== DECRYPT");
-
         let (rest, decrypted, _) = ciphertext.iter().fold(
             (Vec::new(), Vec::new(), Block::empty()),
             |(mut rest, mut decrypted, mut prev_encrypted), byte| {
@@ -434,13 +400,7 @@ impl<'a> AES<'a> {
                 if rest.len() >= 16 {
                     let bytes: Vec<u8> = rest.drain(0..16).collect();
                     let k = Block::from_vec(bytes.clone());
-                    print!("IV: ");
-                    print_box(&*prev_encrypted.data);
-                    print!("CI: ");
-                    print_box(&*k.data);
                     decrypted.push(self.inv_cipher(k, &prev_encrypted));
-                    print!("DE: ");
-                    print_box(&*decrypted[decrypted.len() - 1].data);
                     prev_encrypted = Block::from_vec(bytes);
                 }
 
@@ -458,6 +418,7 @@ impl<'a> AES<'a> {
     }
 }
 
+#[allow(non_snake_case)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -491,14 +452,14 @@ mod tests {
     }
 
     #[test]
-    fn aes256() {
+    fn AES256() {
         let key = [
             0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d,
             0x77, 0x81, 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3,
             0x09, 0x14, 0xdf, 0xf4,
         ];
 
-        let aes = AES::new(&key, AESKeySize::aes256).unwrap();
+        let aes = AES::new(&key, AESKeySize::AES256).unwrap();
 
         let content = b"hello motherfuck";
 
@@ -510,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn aes256ex() {
+    fn AES256ex() {
         let plaintext = [
             0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
             0xff,
@@ -521,7 +482,7 @@ mod tests {
             0x1c, 0x1d, 0x1e, 0x1f,
         ];
 
-        let aes = AES::new(&key, AESKeySize::aes256).unwrap();
+        let aes = AES::new(&key, AESKeySize::AES256).unwrap();
         let c = aes.cipher(Block::new(&plaintext), &Block::empty());
         println!("{:?}", c.to_bytes());
         let output = [
@@ -535,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    fn aes128ex() {
+    fn AES128ex() {
         let plaintext = [
             0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
             0xff,
@@ -545,7 +506,7 @@ mod tests {
             0x0e, 0x0f,
         ];
 
-        let aes = AES::new(&key, AESKeySize::aes128).unwrap();
+        let aes = AES::new(&key, AESKeySize::AES128).unwrap();
         let c = aes.cipher(Block::new(&plaintext), &Block::empty());
         println!("{:?}", c.to_bytes());
         let output = [
@@ -559,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn aes192ex() {
+    fn AES192ex() {
         let plaintext = [
             0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
             0xff,
@@ -569,7 +530,7 @@ mod tests {
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
         ];
 
-        let aes = AES::new(&key, AESKeySize::aes192).unwrap();
+        let aes = AES::new(&key, AESKeySize::AES192).unwrap();
         let c = aes.cipher(Block::new(&plaintext), &Block::empty());
         println!("{:?}", c.to_bytes());
         let output = [
@@ -591,7 +552,7 @@ mod tests {
         Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
 
         In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
-        let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur".to_vec();
+        // let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur".to_vec();
         while plaintext.len() & 15 != 0 {
             plaintext.pop();
         }
@@ -602,8 +563,7 @@ mod tests {
             0x1c, 0x1d, 0x1e, 0x1f,
         ];
 
-        use std::str;
-        let aes = AES::new(&key, AESKeySize::aes256).unwrap();
+        let aes = AES::new(&key, AESKeySize::AES256).unwrap();
         let c = aes.encrypt(&plaintext);
         // println!("{:?}", c);
         let d = aes.decrypt(&c);
