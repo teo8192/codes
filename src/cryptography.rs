@@ -1,13 +1,11 @@
 use num_bigint::{BigUint, ToBigUint};
 
-use std::ops::BitXorAssign;
-
 use crate::number_theory::inverse;
 use crate::prime::PrimeGenerator;
 
 use std::iter::{ExactSizeIterator, IntoIterator};
 
-const s_box: [u8; 256] = [
+const S_BOX: [u8; 256] = [
     0x63, 0xca, 0xb7, 0x04, 0x09, 0x53, 0xd0, 0x51, 0xcd, 0x60, 0xe0, 0xe7, 0xba, 0x70, 0xe1, 0x8c,
     0x7c, 0x82, 0xfd, 0xc7, 0x83, 0xd1, 0xef, 0xa3, 0x0c, 0x81, 0x32, 0xc8, 0x78, 0x3e, 0xf8, 0xa1,
     0x77, 0xc9, 0x93, 0x23, 0x2c, 0x00, 0xaa, 0x40, 0x13, 0x4f, 0x3a, 0x37, 0x25, 0xb5, 0x98, 0x89,
@@ -26,7 +24,7 @@ const s_box: [u8; 256] = [
     0x76, 0xc0, 0x15, 0x75, 0x84, 0xcf, 0xa8, 0xd2, 0x73, 0xdb, 0x79, 0x08, 0x8a, 0x9e, 0xdf, 0x16,
 ];
 
-const inv_s_box: [u8; 256] = [
+const INV_S_BOX: [u8; 256] = [
     0x52, 0x7c, 0x54, 0x08, 0x72, 0x6c, 0x90, 0xd0, 0x3a, 0x96, 0x47, 0xfc, 0x1f, 0x60, 0xa0, 0x17,
     0x09, 0xe3, 0x7b, 0x2e, 0xf8, 0x70, 0xd8, 0x2c, 0x91, 0xac, 0xf1, 0x56, 0xdd, 0x51, 0xe0, 0x2b,
     0x6a, 0x39, 0x94, 0xa1, 0xf6, 0x48, 0xab, 0x1e, 0x11, 0x74, 0x1a, 0x3e, 0xa8, 0x7f, 0x3b, 0x04,
@@ -168,14 +166,6 @@ struct Block {
     data: Box<[u8; 16]>,
 }
 
-impl BitXorAssign for Block {
-    fn bitxor_assign(&mut self, other: Block) {
-        for i in 0..16 {
-            self.data[i] ^= other.data[i];
-        }
-    }
-}
-
 impl Block {
     pub fn new(bytes: &[u8; 16]) -> Self {
         // assert!(bytes.len() <= 16);
@@ -191,6 +181,21 @@ impl Block {
     pub fn empty() -> Self {
         Block {
             data: Box::new([0u8; 16]),
+        }
+    }
+
+    pub fn from_vec(bytes: Vec<u8>) -> Self {
+        let mut data = Box::new([0u8; 16]);
+        for i in 0..16 {
+            data[i] = bytes[i];
+        }
+
+        Block { data }
+    }
+
+    pub fn bitxor_assign(&mut self, other: &Block) {
+        for i in 0..16 {
+            self.data[i] ^= other.data[i];
         }
     }
 
@@ -229,7 +234,6 @@ impl Block {
 
         while log2(res) >= log2(modulus) {
             let shift = log2(res) - log2(modulus);
-            assert!(shift >= 0);
             assert!(shift <= 8);
             res ^= modulus << shift;
         }
@@ -241,9 +245,9 @@ impl Block {
         for i in 0..16 {
             let idx = (self.data[i] >> 4) | (self.data[i] << 4);
             self.data[i] = if inverse {
-                inv_s_box[idx as usize]
+                INV_S_BOX[idx as usize]
             } else {
-                s_box[idx as usize]
+                S_BOX[idx as usize]
             };
         }
     }
@@ -269,6 +273,8 @@ impl Block {
         let s = self.data.clone();
         let get_col_idx = |c, idx| s[c + idx as usize * 4];
         let mut col = [0u8; 4];
+
+        // this is a matrix where each row is shifted once from the row above
         let matrix = if inverse {
             [0xe, 0xb, 0xd, 0x9]
         } else {
@@ -298,13 +304,13 @@ impl Block {
     }
 }
 
-enum AESKeySize {
+pub enum AESKeySize {
     aes128,
     aes192,
     aes256,
 }
 
-struct AES<'a> {
+pub struct AES<'a> {
     key: &'a [u8],
     w: Vec<u8>,
     key_size: AESKeySize,
@@ -353,7 +359,7 @@ impl<'a> AES<'a> {
             let mut bytes = [0u8; 4];
             for i in 0..4 {
                 let idx = (a[i] >> 4) | (a[i] << 4);
-                bytes[i] = s_box[idx as usize];
+                bytes[i] = S_BOX[idx as usize];
             }
 
             bytes
@@ -407,8 +413,8 @@ impl<'a> AES<'a> {
         }
     }
 
-    pub fn cipher(&self, mut input: Block, iv: Block) -> Block {
-        input ^= iv;
+    fn cipher(&self, mut input: Block, iv: &Block) -> Block {
+        input.bitxor_assign(iv);
 
         input.transpose();
         // let mut state = transpose(&input);
@@ -440,8 +446,8 @@ impl<'a> AES<'a> {
         input
     }
 
-    pub fn inv_cipher(&self, mut input: Block, iv: Block) -> Block {
-        input ^= iv;
+    fn inv_cipher(&self, mut input: Block, iv: &Block) -> Block {
+        input.bitxor_assign(iv);
 
         input.transpose();
         use std::convert::TryInto;
@@ -470,6 +476,77 @@ impl<'a> AES<'a> {
         input.transpose();
 
         input
+    }
+
+    pub fn encrypt(&self, plaintext: &Vec<u8>) -> Vec<u8> {
+        let tmp = Block::empty();
+
+        let (mut rest, mut encrypted) = plaintext.iter().fold(
+            (Vec::new(), Vec::new()),
+            |(mut rest, mut encrypted), byte| {
+                rest.push(*byte);
+                // 16 is blocksize
+                if rest.len() >= 16 {
+                    let iv = if encrypted.len() == 0 {
+                        &tmp
+                    } else {
+                        &encrypted[encrypted.len() - 1]
+                    };
+                    let k = Block::from_vec(rest.drain(0..16).collect());
+                    encrypted.push(self.cipher(k, iv));
+                }
+
+                (rest, encrypted)
+            },
+        );
+
+        if rest.len() > 0 {
+            while rest.len() < 16 {
+                rest.push(0);
+            }
+
+            let iv = if encrypted.len() == 0 {
+                &tmp
+            } else {
+                &encrypted[encrypted.len() - 1]
+            };
+            let k = Block::from_vec(rest.drain(0..16).collect());
+            encrypted.push(self.cipher(k, iv));
+        }
+
+        encrypted
+            .iter()
+            .flat_map(|x| x.data.iter())
+            .map(|x| *x)
+            .collect()
+    }
+
+    pub fn decrypt(&self, ciphertext: &Vec<u8>) -> Vec<u8> {
+        let tmp = Block::empty();
+
+        let (rest, decrypted, _) = ciphertext.iter().fold(
+            (Vec::new(), Vec::new(), Block::empty()),
+            |(mut rest, mut decrypted, mut prev_encrypted), byte| {
+                rest.push(*byte);
+                // 16 is blocksize
+                if rest.len() >= 16 {
+                    let bytes: Vec<u8> = rest.drain(0..16).collect();
+                    let k = Block::from_vec(bytes.clone());
+                    decrypted.push(self.inv_cipher(k, &prev_encrypted));
+                    prev_encrypted = Block::from_vec(bytes);
+                }
+
+                (rest, decrypted, prev_encrypted)
+            },
+        );
+
+        assert!(rest.len() == 0);
+
+        decrypted
+            .iter()
+            .flat_map(|x| x.data.iter())
+            .map(|x| *x)
+            .collect()
     }
 }
 
@@ -545,9 +622,9 @@ mod tests {
 
         let content = b"hello motherfuck";
 
-        let c = aes.cipher(Block::new(&content), Block::empty());
+        let c = aes.cipher(Block::new(&content), &Block::empty());
         println!("{:?}", c.to_bytes());
-        let d = aes.inv_cipher(c, Block::empty());
+        let d = aes.inv_cipher(c, &Block::empty());
         println!("{:?}", d.to_bytes());
         assert_eq!(d.to_bytes(), content, "decryption faliure");
     }
@@ -565,14 +642,14 @@ mod tests {
         ];
 
         let aes = AES::new(&key, AESKeySize::aes256).unwrap();
-        let c = aes.cipher(Block::new(&plaintext), Block::empty());
+        let c = aes.cipher(Block::new(&plaintext), &Block::empty());
         println!("{:?}", c.to_bytes());
         let output = [
             0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf, 0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49,
             0x60, 0x89,
         ];
         assert_eq!(c.to_bytes(), output, "encryption faliure");
-        let d = aes.inv_cipher(c, Block::empty());
+        let d = aes.inv_cipher(c, &Block::empty());
         println!("{:?}", d.to_bytes());
         assert_eq!(d.to_bytes(), plaintext, "decryption faliure");
     }
@@ -589,13 +666,14 @@ mod tests {
         ];
 
         let aes = AES::new(&key, AESKeySize::aes128).unwrap();
-        let c = aes.cipher(Block::new(&plaintext), Block::empty());
+        let c = aes.cipher(Block::new(&plaintext), &Block::empty());
         println!("{:?}", c.to_bytes());
         let output = [
-            0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4, 0xc5, 0x5a,
+            0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4,
+            0xc5, 0x5a,
         ];
         assert_eq!(c.to_bytes(), output, "encryption faliure");
-        let d = aes.inv_cipher(c, Block::empty());
+        let d = aes.inv_cipher(c, &Block::empty());
         println!("{:?}", d.to_bytes());
         assert_eq!(d.to_bytes(), plaintext, "decryption faliure");
     }
@@ -608,19 +686,53 @@ mod tests {
         ];
         let key = [
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17
+            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
         ];
 
         let aes = AES::new(&key, AESKeySize::aes192).unwrap();
-        let c = aes.cipher(Block::new(&plaintext), Block::empty());
+        let c = aes.cipher(Block::new(&plaintext), &Block::empty());
         println!("{:?}", c.to_bytes());
         let output = [
-            0xdd, 0xa9, 0x7c, 0xa4, 0x86, 0x4c, 0xdf, 0xe0, 0x6e, 0xaf, 0x70, 0xa0, 0xec, 0x0d, 0x71, 0x91
+            0xdd, 0xa9, 0x7c, 0xa4, 0x86, 0x4c, 0xdf, 0xe0, 0x6e, 0xaf, 0x70, 0xa0, 0xec, 0x0d,
+            0x71, 0x91,
         ];
         assert_eq!(c.to_bytes(), output, "encryption faliure");
-        let d = aes.inv_cipher(c, Block::empty());
+        let d = aes.inv_cipher(c, &Block::empty());
         println!("{:?}", d.to_bytes());
         assert_eq!(d.to_bytes(), plaintext, "decryption faliure");
     }
 
+    #[test]
+    fn stream_test() {
+        // let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+
+// Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
+
+// Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
+
+// In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
+        let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur".to_vec();
+        while plaintext.len() & 15 != 0 {
+            plaintext.pop();
+        }
+
+        let key = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+            0x1c, 0x1d, 0x1e, 0x1f,
+        ];
+
+        use std::str;
+        let aes = AES::new(&key, AESKeySize::aes256).unwrap();
+        let c = aes.encrypt(&plaintext);
+        // println!("{:?}", c);
+        let d = aes.decrypt(&c);
+        // println!("{:?}", d);
+        for i in 0..(if plaintext.len() > 50 { 50 } else { plaintext.len() }) {
+            if plaintext[i] != d[i] {
+                println!("{}", i);
+            }
+        }
+        assert_eq!(d, plaintext, "decryption faliure");
+    }
 }
