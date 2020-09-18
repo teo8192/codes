@@ -1,10 +1,3 @@
-use num_bigint::{BigUint, ToBigUint};
-
-use crate::number_theory::inverse;
-use crate::prime::PrimeGenerator;
-
-use std::iter::{ExactSizeIterator, IntoIterator};
-
 const S_BOX: [u8; 256] = [
     0x63, 0xca, 0xb7, 0x04, 0x09, 0x53, 0xd0, 0x51, 0xcd, 0x60, 0xe0, 0xe7, 0xba, 0x70, 0xe1, 0x8c,
     0x7c, 0x82, 0xfd, 0xc7, 0x83, 0xd1, 0xef, 0xa3, 0x0c, 0x81, 0x32, 0xc8, 0x78, 0x3e, 0xf8, 0xa1,
@@ -43,19 +36,6 @@ const INV_S_BOX: [u8; 256] = [
     0xfb, 0xcb, 0x4e, 0x25, 0x92, 0x84, 0x06, 0x6b, 0x73, 0x6e, 0x1b, 0xf4, 0x5f, 0xef, 0x61, 0x7d,
 ];
 
-struct RSA {
-    e: BigUint,
-    d: BigUint,
-    pub n: BigUint,
-    pub size: usize,
-}
-
-pub trait Crypt {
-    fn encrypt(&mut self, bytes: Vec<u8>) -> Vec<BigUint>;
-    fn decrypt(&mut self, nums: Vec<BigUint>) -> Vec<u8>;
-    fn block_size(&self) -> usize;
-}
-
 fn print_box(b: &[u8; 16]) {
     for x in 0..4 {
         for y in 0..4 {
@@ -65,91 +45,6 @@ fn print_box(b: &[u8; 16]) {
     println!("");
 }
 
-impl RSA {
-    pub fn new(size: usize) -> RSA {
-        let s1 = size / 2 + 3;
-        let s2 = size - s1;
-        let mut rng = rand::thread_rng();
-        let p1 = PrimeGenerator::rsa_prime(s1, &mut rng);
-        let p2 = PrimeGenerator::rsa_prime(s2, &mut rng);
-
-        let d = inverse(
-            65535.to_biguint().unwrap(),
-            (&p1 - 1.to_biguint().unwrap()) * (&p2 - 1.to_biguint().unwrap()),
-        );
-        let d = d.unwrap();
-
-        let n = &p1 * &p2;
-
-        // TODO: verify key length with log2
-
-        RSA {
-            // keys: (p1, p2),
-            e: 65535.to_biguint().unwrap(),
-            d,
-            n,
-            size,
-        }
-    }
-
-    fn encrypt_block(&self, data: &BigUint) -> BigUint {
-        data.modpow(&self.e, &self.n)
-    }
-
-    fn decrypt_block(&self, data: &BigUint) -> BigUint {
-        data.modpow(&self.d, &self.n)
-    }
-}
-
-impl Crypt for RSA {
-    fn encrypt(&mut self, bytes: Vec<u8>) -> Vec<BigUint> {
-        // assert that the number of bytes is sufficient:
-        // e^message > n
-        // (2^16)^(message) > 2 ^ size
-        // 16 * message > size
-        // (2 ^ 4)*2(log2(bytes*8)) > size
-        // 4 + log2(bytes*8) > log2(size)
-        // 7 + log2(bytes) > log2(size)
-        // log2(bytes) > log2(size) - 7
-        // log2(bytes) > log2(size >> 7)
-        // bytes) > size >> 7
-
-        // TODO: instead of asserting, pad shit
-        assert!(bytes.len() > self.size >> 7);
-        let (mut rest, mut data) =
-            bytes
-                .iter()
-                .fold((Vec::new(), Vec::new()), |(mut rest, mut data), byte| {
-                    rest.push(*byte);
-                    if (rest.len() + 1) * 8 >= self.block_size() {
-                        data.push(self.encrypt_block(&BigUint::from_bytes_be(
-                            &mut rest.drain(0..(self.block_size() / 8)).collect::<Vec<u8>>()[..],
-                        )));
-                    }
-                    (rest, data)
-                });
-
-        assert!(rest.len() > self.size >> 7);
-
-        if rest.len() > 0 {
-            data.push(self.encrypt_block(&BigUint::from_bytes_be(
-                &mut rest.drain(0..rest.len()).collect::<Vec<u8>>()[..],
-            )));
-        }
-
-        data
-    }
-
-    fn decrypt(&mut self, nums: Vec<BigUint>) -> Vec<u8> {
-        nums.iter()
-            .flat_map(|elem| self.decrypt_block(elem).to_bytes_be())
-            .collect()
-    }
-
-    fn block_size(&self) -> usize {
-        self.size - 1
-    }
-}
 
 fn transpose(input: &[u8; 16]) -> [u8; 16] {
     let mut out = [0u8; 16];
@@ -566,35 +461,7 @@ impl<'a> AES<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num_bigint::{BigUint, ToBigUint};
-    #[test]
-    fn create_keys() {
-        let num = 1234567890;
-        let mut keys = RSA::new(512);
-        let encrypted = keys.encrypt_block(&num.to_biguint().unwrap());
-        assert_ne!(encrypted, num.to_biguint().unwrap());
-        let decrypted = keys.decrypt_block(&encrypted);
-        assert_eq!(decrypted, num.to_biguint().unwrap());
 
-        let string = b"iuha diuh diuh seouihafhj sfjkhbsvcuyb serufy bwuyebf ysbad ufy busyrbef uyawb uefybakjshdbf askjnbvyu ba yuefb aywebf hkjbcvuybwae fb kwaebyf uyabweuof bwoeyf owyuevfbuoy vacd habs kfjhwuyefbgo uyagfouywe gffhbwefyb aygrf oygwehab fhbwcyb ygrfv aygwerfhjwbe fsjdbc uybsdovgh hbwoauebyf oyuasgdvyb h r yuagrrf87a9 7y 0ra7h bhhas hdbvuyhasbdv ygawbhfnmabsd,nmbasvcbhudcb oghr8 gar jhioj".to_vec();
-
-        let encrypted = keys.encrypt(string.clone());
-
-        assert!(encrypted.len() > 1);
-
-        let decrypted = keys.decrypt(encrypted);
-
-        use std::string::String;
-        println!("{}", std::str::from_utf8(&decrypted[..]).expect("oh"));
-
-        assert_eq!(decrypted, string);
-    }
-
-    fn big(x: u32) -> BigUint {
-        x.to_biguint().unwrap()
-    }
-
-    #[test]
     fn test_multiplication() {
         assert_eq!(Block::multiply_bytes(0x57, 0x83), 0xc1);
     }
@@ -717,13 +584,13 @@ mod tests {
 
     #[test]
     fn stream_test() {
-        // let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+        let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
 
-        // Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
+        Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
 
-        // Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
+        Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
 
-        // In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
+        In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
         let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur".to_vec();
         while plaintext.len() & 15 != 0 {
             plaintext.pop();
