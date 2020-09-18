@@ -165,7 +165,7 @@ impl Block {
         }
     }
 
-    fn add_round_key(&mut self, w: &[u8; 16]) {
+    fn add_round_key(&mut self, w: &[u8]) {
         let mut tmp = [0u8; 16];
         for x in 0..4 {
             for y in 0..4 {
@@ -283,28 +283,18 @@ impl AES {
     fn cipher(&self, mut input: Block, iv: &Block) -> Block {
         input.transpose();
         // let mut state = transpose(&input);
-        use std::convert::TryInto;
-
-        input.add_round_key(&self.w[0..(4 * 4)].try_into().expect("Wrong length"));
+        input.add_round_key(&self.w[0..16]);
 
         for round in 1..self.nr {
             input.sub_bytes(false);
             input.shift_rows(false);
             input.mix_columns(false);
-            input.add_round_key(
-                &self.w[(round * 16)..((round + 1) * 16)]
-                    .try_into()
-                    .expect("Wrong length"),
-            );
+            input.add_round_key(&self.w[(round * 16)..((round + 1) * 16)]);
         }
 
         input.sub_bytes(false);
         input.shift_rows(false);
-        input.add_round_key(
-            &self.w[(self.nr * 16)..((self.nr + 1) * 16)]
-                .try_into()
-                .expect("Wrong length"),
-        );
+        input.add_round_key(&self.w[(self.nr * 16)..((self.nr + 1) * 16)]);
 
         input.transpose();
 
@@ -317,28 +307,19 @@ impl AES {
         input.bitxor_assign(iv);
 
         input.transpose();
-        use std::convert::TryInto;
 
-        input.add_round_key(
-            &self.w[(self.nr * 16)..((self.nr + 1) * 16)]
-                .try_into()
-                .expect("Wrong length"),
-        );
+        input.add_round_key(&self.w[(self.nr * 16)..((self.nr + 1) * 16)]);
 
         for round in (1..self.nr).rev() {
             input.shift_rows(true);
             input.sub_bytes(true);
-            input.add_round_key(
-                &self.w[(round * 16)..((round + 1) * 16)]
-                    .try_into()
-                    .expect("Wrong length"),
-            );
+            input.add_round_key(&self.w[(round * 16)..((round + 1) * 16)]);
             input.mix_columns(true);
         }
 
         input.shift_rows(true);
         input.sub_bytes(true);
-        input.add_round_key(&self.w[0..16].try_into().expect("Wrong length"));
+        input.add_round_key(&self.w[0..16]);
 
         input.transpose();
 
