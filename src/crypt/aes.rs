@@ -78,6 +78,12 @@ impl Block {
         self.data.to_vec()
     }
 
+    /// Transpose thoe block.
+    /// The reason for this is that i do not want to rewrite the code.
+    /// I think of the stuff row-major, but the peoples at NIST apparently think col-major.
+    /// but a transpose will flip all this.
+    /// So a transpose is needed before and after each encryption/decryption (no need from user,
+    /// only internal use).
     fn transpose(&mut self) {
         let mut out = [0u8; 16];
         for x in 0..4 {
@@ -88,6 +94,8 @@ impl Block {
         *self.data = out
     }
 
+    /// Multiply two polynomials togeather over the finite field GF(2^8)
+    /// this irreducible polynomial is x^8 + x^4 + x^3 + x + 1
     fn multiply_bytes(a: u8, b: u8) -> u8 {
         fn log2(mut a: u16) -> u16 {
             let mut res = 0;
@@ -103,10 +111,15 @@ impl Block {
         let mut res: u16 = 0;
         let a1 = a as u16;
         let b1 = b as u16;
+
+        // multiply them shits
+        // answer mught roll over, so use 16 bit.
         for i in 0..8 {
             res ^= a1 * (b1 & (1 << i));
         }
 
+        // long division of the answer to get the remainder.
+        // this will be at most 8 iterations.
         while log2(res) >= log2(modulus) {
             let shift = log2(res) - log2(modulus);
             assert!(shift <= 8);
@@ -116,6 +129,9 @@ impl Block {
         res as u8
     }
 
+    /// Use S-box to substitute bytes.
+    /// could be implementeted as the multiplicative inverse and
+    /// a specific affine transformation
     fn sub_bytes(&mut self, inverse: bool) {
         for i in 0..16 {
             let idx = (self.data[i] >> 4) | (self.data[i] << 4);
@@ -127,6 +143,9 @@ impl Block {
         }
     }
 
+    /// Shift the rows.
+    /// row n shifted n times, start from 0.
+    /// inverse is just the other way.
     fn shift_rows(&mut self, inverse: bool) {
         for i in 0..4 {
             let mut buf = [0u8; 4];
@@ -144,6 +163,7 @@ impl Block {
         }
     }
 
+    /// Hoenstly, this just mixes up the columns (but not across the different columns).
     fn mix_columns(&mut self, inverse: bool) {
         let s = self.data.clone();
         let get_col_idx = |c, idx| s[c + idx as usize * 4];
@@ -165,15 +185,12 @@ impl Block {
         }
     }
 
+    /// apply the 16 byte round key
     fn add_round_key(&mut self, w: &[u8]) {
-        let mut tmp = [0u8; 16];
         for x in 0..4 {
             for y in 0..4 {
-                tmp[x + y * 4] = self.data[x + y * 4] ^ w[x * 4 + y];
+                self.data[x + y * 4] ^= w[x * 4 + y];
             }
-        }
-        for i in 0..16 {
-            self.data[i] = tmp[i];
         }
     }
 }
@@ -288,6 +305,7 @@ impl AES {
         }
     }
 
+    /// Encrypt a single block
     fn cipher(&self, mut input: Block, iv: &Block) -> Block {
         input.transpose();
         // let mut state = transpose(&input);
@@ -311,6 +329,7 @@ impl AES {
         input
     }
 
+    /// decrypt a block
     fn inv_cipher(&self, mut input: Block, iv: &Block) -> Block {
         input.bitxor_assign(iv);
 
@@ -334,6 +353,10 @@ impl AES {
         input
     }
 
+    /// encrypt arbitrary amount of bytes.
+    /// could possibly be changed to in-place to be faster (less memory allocation, but will
+    /// irradicate plaintext (if not copied elswhere, but that defeats the purpose of the memory
+    /// save))
     pub fn encrypt(&self, plaintext: &Vec<u8>) -> Vec<u8> {
         let tmp = Block::empty();
 
@@ -375,11 +398,12 @@ impl AES {
 
         encrypted
             .iter()
-            .flat_map(|x| x.data.iter())
-            .map(|x| *x)
+            .flat_map(|x| x.data.iter()) // convert from block to [&u8]
+            .map(|x| *x) // [&u8] -> [u8]
             .collect()
     }
 
+    /// decrypt arbitrary bytes.
     pub fn decrypt(&self, ciphertext: &Vec<u8>) -> Vec<u8> {
         let (rest, decrypted, _) = ciphertext.iter().fold(
             (Vec::new(), Vec::new(), Block::empty()),
