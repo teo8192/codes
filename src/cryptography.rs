@@ -414,8 +414,6 @@ impl<'a> AES<'a> {
     }
 
     fn cipher(&self, mut input: Block, iv: &Block) -> Block {
-        input.bitxor_assign(iv);
-
         input.transpose();
         // let mut state = transpose(&input);
         use std::convert::TryInto;
@@ -442,6 +440,8 @@ impl<'a> AES<'a> {
         );
 
         input.transpose();
+
+        input.bitxor_assign(iv);
 
         input
     }
@@ -493,7 +493,13 @@ impl<'a> AES<'a> {
                         &encrypted[encrypted.len() - 1]
                     };
                     let k = Block::from_vec(rest.drain(0..16).collect());
+                    print!("IV: ");
+                    print_box(&*iv.data);
+                    print!("ME: ");
+                    print_box(&*k.data);
                     encrypted.push(self.cipher(k, iv));
+                    print!("CI: ");
+                    print_box(&*encrypted[encrypted.len() - 1].data);
                 }
 
                 (rest, encrypted)
@@ -523,6 +529,7 @@ impl<'a> AES<'a> {
 
     pub fn decrypt(&self, ciphertext: &Vec<u8>) -> Vec<u8> {
         let tmp = Block::empty();
+        println!("======== DECRYPT");
 
         let (rest, decrypted, _) = ciphertext.iter().fold(
             (Vec::new(), Vec::new(), Block::empty()),
@@ -532,7 +539,13 @@ impl<'a> AES<'a> {
                 if rest.len() >= 16 {
                     let bytes: Vec<u8> = rest.drain(0..16).collect();
                     let k = Block::from_vec(bytes.clone());
+                    print!("IV: ");
+                    print_box(&*prev_encrypted.data);
+                    print!("CI: ");
+                    print_box(&*k.data);
                     decrypted.push(self.inv_cipher(k, &prev_encrypted));
+                    print!("DE: ");
+                    print_box(&*decrypted[decrypted.len() - 1].data);
                     prev_encrypted = Block::from_vec(bytes);
                 }
 
@@ -706,11 +719,11 @@ mod tests {
     fn stream_test() {
         // let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
 
-// Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
+        // Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
 
-// Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
+        // Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
 
-// In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
+        // In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
         let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur".to_vec();
         while plaintext.len() & 15 != 0 {
             plaintext.pop();
@@ -728,7 +741,11 @@ mod tests {
         // println!("{:?}", c);
         let d = aes.decrypt(&c);
         // println!("{:?}", d);
-        for i in 0..(if plaintext.len() > 50 { 50 } else { plaintext.len() }) {
+        for i in 0..(if plaintext.len() > 50 {
+            50
+        } else {
+            plaintext.len()
+        }) {
             if plaintext[i] != d[i] {
                 println!("{}", i);
             }
