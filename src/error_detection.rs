@@ -1,5 +1,8 @@
-use rand_core::RngCore;
 use std::convert::TryInto;
+
+// this import implements some traits that is neccecary
+#[allow(unused_imports)]
+use rand_core::RngCore;
 
 /// if i is a bit-index, then this
 /// function returns the (idx, off)

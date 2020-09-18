@@ -423,6 +423,7 @@ impl AES {
 mod tests {
     use super::*;
 
+    #[test]
     fn test_multiplication() {
         assert_eq!(Block::multiply_bytes(0x57, 0x83), 0xc1);
     }

@@ -3,8 +3,6 @@ use num_bigint::{BigUint, ToBigUint};
 use crate::number_theory::inverse;
 use crate::prime::PrimeGenerator;
 
-use std::iter::{ExactSizeIterator, IntoIterator};
-
 struct RSA {
     e: BigUint,
     d: BigUint,
@@ -18,6 +16,7 @@ pub trait Crypt {
     fn block_size(&self) -> usize;
 }
 
+#[allow(dead_code)]
 impl RSA {
     pub fn new(size: usize) -> RSA {
         let s1 = size / 2 + 3;
@@ -104,6 +103,7 @@ impl Crypt for RSA {
     }
 }
 
+#[allow(dead_code)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,7 +125,6 @@ mod tests {
 
         let decrypted = keys.decrypt(encrypted);
 
-        use std::string::String;
         println!("{}", std::str::from_utf8(&decrypted[..]).expect("oh"));
 
         assert_eq!(decrypted, string);

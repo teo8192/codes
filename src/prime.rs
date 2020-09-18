@@ -76,6 +76,7 @@ impl<'a> PrimeGenerator<'a> {
     }
 
     // returns the first pseudoprime after the seed
+    #[allow(dead_code)]
     fn prime_after(&self, seed: BigUint) -> BigUint {
         std::iter::repeat(seed)
             .enumerate()
