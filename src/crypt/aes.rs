@@ -400,45 +400,70 @@ impl AES {
         );
 
         if rest.len() > 0 {
-            while rest.len() < 16 {
-                rest.push(0);
+            if let Some(end) = encrypted.pop() {
+                rest.append(&mut end.to_bytes());
+            } else {
+                while rest.len() < 16 {
+                    rest.push(0);
+                }
             }
 
-            encrypted = encrypt_block(rest, encrypted).1;
+            let res = encrypt_block(rest, encrypted);
+            rest = res.0;
+            encrypted = res.1;
         }
 
-        encrypted
+        let mut res: Vec<u8> = encrypted
             .iter()
             .flat_map(|x| x.data.iter()) // convert from block to [&u8]
-            .map(|x| *x) // [&u8] -> [u8]
-            .collect()
+            .map(|x| *x) // &u8 -> u8
+            .collect();
+
+        res.append(&mut rest);
+
+        res
     }
 
     /// decrypt arbitrary bytes.
     pub fn decrypt(&self, ciphertext: &Vec<u8>) -> Vec<u8> {
-        let (rest, decrypted, _) = ciphertext.iter().fold(
-            (Vec::new(), Vec::new(), Block::empty()),
-            |(mut rest, mut decrypted, mut prev_encrypted), byte| {
+        let (mut rest, mut decrypted, _, prev_iv) = ciphertext.iter().fold(
+            (Vec::new(), Vec::new(), Block::empty(), Block::empty()),
+            |(mut rest, mut decrypted, mut prev_encrypted, mut p), byte| {
                 rest.push(*byte);
                 // 16 is blocksize
                 if rest.len() >= 16 {
                     let bytes: Vec<u8> = rest.drain(0..16).collect();
                     let k = Block::from_vec(bytes.clone());
                     decrypted.push(self.inv_cipher(k, &prev_encrypted));
+                    p = prev_encrypted;
                     prev_encrypted = Block::from_vec(bytes);
                 }
 
-                (rest, decrypted, prev_encrypted)
+                (rest, decrypted, prev_encrypted, p)
             },
         );
 
-        assert!(rest.len() == 0);
+        if rest.len() > 0 {
+            if let Some(end) = decrypted.pop() {
+                let mut bytes = end.to_bytes();
+                let mut useful: Vec<u8> = bytes.drain(rest.len()..16).collect();
+                useful.append(&mut rest);
+                let dec = self.inv_cipher(Block::from_vec(useful), &prev_iv);
+                rest = bytes;
+                decrypted.push(dec);
+            } else {
+                assert!(false);
+            }
+        }
 
-        decrypted
+        let mut res: Vec<u8> = decrypted
             .iter()
             .flat_map(|x| x.data.iter())
             .map(|x| *x)
-            .collect()
+            .collect();
+        res.append(&mut rest);
+
+        res
     }
 }
 
@@ -578,9 +603,6 @@ mod tests {
 
         In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
         // let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur".to_vec();
-        while plaintext.len() & 15 != 0 {
-            plaintext.pop();
-        }
 
         let key = [
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
@@ -589,19 +611,11 @@ mod tests {
         ];
 
         let aes = AES::new(&key, AESKeySize::AES256).unwrap();
+        println!("{:?}", plaintext);
         let c = aes.encrypt(&plaintext);
-        // println!("{:?}", c);
+        println!("{:?}", c);
         let d = aes.decrypt(&c);
-        // println!("{:?}", d);
-        for i in 0..(if plaintext.len() > 50 {
-            50
-        } else {
-            plaintext.len()
-        }) {
-            if plaintext[i] != d[i] {
-                println!("{}", i);
-            }
-        }
+        println!("{:?}", d);
         assert_eq!(d, plaintext, "decryption faliure");
     }
 }
