@@ -195,6 +195,17 @@ impl Block {
     }
 }
 
+impl std::fmt::Display for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for x in 0..4 {
+            for y in 0..4 {
+                write!(f, "{:02x}", self.data[x + y * 4])?;
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The specification of the key length
 pub enum AESKeySize {
     AES128,
