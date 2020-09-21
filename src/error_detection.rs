@@ -148,13 +148,94 @@ pub fn decode(data: Vec<u8>) -> Vec<u8> {
             // append all decoded bytes
             rest.append(&mut decode_block(elem));
             // this could also be folded I guess
-            while rest.len() > 8 {
+            while rest.len() >= 8 {
                 // here 8 bits is combined into a byte
                 output.push(rest.drain(0..8).fold(0, |byte, bit| (byte << 1) | bit));
             }
             (rest, output)
         })
         .1
+}
+
+struct ErrCorrEncoder<'a, I: Iterator<Item = u8>> {
+    iterator: &'a mut I,
+    next: Option<u8>,
+    rest_in_bits: Vec<u8>,
+}
+
+impl<'a, I: Iterator<Item = u8>> Iterator for ErrCorrEncoder<'a, I> {
+    type Item = u8;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next.is_some() {
+            let next = self.next;
+            self.next = None;
+            return next;
+        }
+
+        while self.rest_in_bits.len() < 11 {
+            if let Some(next) = self.iterator.next() {
+                self.rest_in_bits.append(&mut (0..8).map(|i| ((next) >> (7 - i)) & 1u8).collect());
+            } else if self.rest_in_bits.len() == 0 {
+                return None; 
+            } else {
+                self.rest_in_bits.push(0)
+            }
+        }
+
+        let bytes = encode_block(&self.rest_in_bits.drain(0..11).collect::<Vec<u8>>()[..]);
+        self.next = Some(bytes[1]);
+
+        Some(bytes[0])
+    }
+}
+
+struct ErrCorrDecoder<'a, I: Iterator<Item = u8>> {
+    iterator: &'a mut I,
+    rest_bits: Vec<u8>,
+}
+
+impl<'a, I: Iterator<Item = u8>> Iterator for ErrCorrDecoder<'a, I> {
+    type Item = u8;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.rest_bits.len() < 8 {
+            let byte1 = self.iterator.next()?;
+            self.rest_bits.append(&mut decode_block(&[
+                byte1,
+                if let Some(byte2) = self.iterator.next() {
+                    byte2
+                } else {
+                    0
+                },
+            ]));
+        }
+
+        Some(
+            self.rest_bits
+                .drain(0..8)
+                .fold(0, |byte, bit| (byte << 1) | bit),
+        )
+    }
+}
+
+trait ErrorDetection<'a, I: Iterator<Item = u8>> {
+    fn encode(&mut self) -> ErrCorrEncoder<I>;
+    fn decode(&mut self) -> ErrCorrDecoder<I>;
+}
+
+impl<'a, I: Iterator<Item = u8>> ErrorDetection<'a, I> for I {
+    fn encode(&mut self) -> ErrCorrEncoder<I> {
+        ErrCorrEncoder {
+            iterator: self,
+            next: None,
+            rest_in_bits: Vec::new(),
+        }
+    }
+    fn decode(&mut self) -> ErrCorrDecoder<I> {
+        ErrCorrDecoder {
+            iterator: self,
+            rest_bits: Vec::new(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -239,5 +320,15 @@ mod tests {
             rng.fill_bytes(&mut v[..]);
             run_stream_test(&mut v)
         }
+    }
+
+    #[test]
+    fn test_hamming_iterators() {
+        let teststring = b"hello motherfucker".to_vec();
+        let kake: Vec<u8> = teststring.into_iter().encode().collect();
+        let test: Vec<u8> = encode(b"hello motherfucker".to_vec());
+        assert_eq!(test, kake);
+        let kjartan: Vec<u8> = kake.into_iter().decode().collect();
+        assert_eq!(kjartan, b"hello motherfucker\0");
     }
 }
