@@ -94,7 +94,7 @@ fn decode_block(data: &[u8; 2]) -> Vec<u8> {
 }
 
 /// encode a bytes object.
-pub fn encode(data: Vec<u8>) -> Vec<[u8; 2]> {
+pub fn encode(data: Vec<u8>) -> Vec<u8> {
     let encode_11 = |rest: &mut Vec<u8>| encode_block(&rest.drain(0..11).collect::<Vec<u8>>()[..]);
 
     let (mut rest, mut output) =
@@ -118,14 +118,32 @@ pub fn encode(data: Vec<u8>) -> Vec<[u8; 2]> {
     }
 
     output
+        .iter()
+        .flat_map(|x| x.iter())
+        .map(|x| *x)
+        .collect::<Vec<u8>>()
 }
 
 /// decodes a vector of byte-tuples into a proper byte vector
 /// Might return trailing zeros
-pub fn decode(data: Vec<[u8; 2]>) -> Vec<u8> {
+pub fn decode(data: Vec<u8>) -> Vec<u8> {
     // might be stuff in the rest, but this will only be trailing zeros.
     // since this is less that a byte of bits, it was probably not intentionally put there
+    assert_eq!(data.len() & 1, 0);
     data.iter()
+        .fold((Vec::new(), Vec::new()), |(mut rest, mut tuples), byte| {
+            rest.push(*byte);
+            if rest.len() >= 2 {
+                let mut dual = [0u8; 2];
+                for (i, b) in rest.drain(0..2).enumerate() {
+                    dual[i] = b;
+                }
+                tuples.push(dual)
+            }
+            (rest, tuples)
+        })
+        .1
+        .iter()
         .fold((Vec::new(), Vec::new()), |(mut rest, mut output), elem| {
             // append all decoded bytes
             rest.append(&mut decode_block(elem));
@@ -182,18 +200,16 @@ mod tests {
                 .map(|(n, bytes)| {
                     // flip a bit of every other byte. See how you like them apples.
 
+                    let mut b = *bytes;
                     // use a has to get a pseudorandom bit
-                    let mut hasher = DefaultHasher::new();
-                    n.hash(&mut hasher);
-                    bytes.hash(&mut hasher);
-                    let mut k = hasher.finish() as usize;
-                    let idx = k & 1;
-                    k >>= 1;
+                    if n & 1 == 0 {
+                        let mut hasher = DefaultHasher::new();
+                        n.hash(&mut hasher);
+                        bytes.hash(&mut hasher);
+                        let k = hasher.finish() as usize;
 
-                    let mut b = [0; 2];
-
-                    b[idx] = bytes[idx] ^ (1 << (k & 7));
-                    b[1 ^ idx] = bytes[1 ^ idx];
+                        b ^= 1 << (k & 7);
+                    }
 
                     b
                 })
