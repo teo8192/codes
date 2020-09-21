@@ -157,7 +157,7 @@ pub fn decode(data: Vec<u8>) -> Vec<u8> {
         .1
 }
 
-struct ErrCorrEncoder<'a, I: Iterator<Item = u8>> {
+pub struct ErrCorrEncoder<'a, I: Iterator<Item = u8>> {
     iterator: &'a mut I,
     next: Option<u8>,
     rest_in_bits: Vec<u8>,
@@ -174,9 +174,10 @@ impl<'a, I: Iterator<Item = u8>> Iterator for ErrCorrEncoder<'a, I> {
 
         while self.rest_in_bits.len() < 11 {
             if let Some(next) = self.iterator.next() {
-                self.rest_in_bits.append(&mut (0..8).map(|i| ((next) >> (7 - i)) & 1u8).collect());
+                self.rest_in_bits
+                    .append(&mut (0..8).map(|i| ((next) >> (7 - i)) & 1u8).collect());
             } else if self.rest_in_bits.len() == 0 {
-                return None; 
+                return None;
             } else {
                 self.rest_in_bits.push(0)
             }
@@ -189,7 +190,7 @@ impl<'a, I: Iterator<Item = u8>> Iterator for ErrCorrEncoder<'a, I> {
     }
 }
 
-struct ErrCorrDecoder<'a, I: Iterator<Item = u8>> {
+pub struct ErrCorrDecoder<'a, I: Iterator<Item = u8>> {
     iterator: &'a mut I,
     rest_bits: Vec<u8>,
 }
@@ -217,7 +218,7 @@ impl<'a, I: Iterator<Item = u8>> Iterator for ErrCorrDecoder<'a, I> {
     }
 }
 
-trait ErrorDetection<'a, I: Iterator<Item = u8>> {
+pub trait ErrorDetection<'a, I: Iterator<Item = u8>> {
     fn encode(&mut self) -> ErrCorrEncoder<I>;
     fn decode(&mut self) -> ErrCorrDecoder<I>;
 }
