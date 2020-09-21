@@ -459,7 +459,7 @@ impl AES {
                 rest = bytes;
                 decrypted.push(dec);
             } else {
-                assert!(false);
+                panic!("Expected more bytes to decrypt.");
             }
         }
 
