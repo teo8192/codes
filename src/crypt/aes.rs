@@ -1,3 +1,6 @@
+use crate::crypt::Crypt;
+use std::collections::VecDeque;
+
 const S_BOX: [u8; 256] = [
     0x63, 0xca, 0xb7, 0x04, 0x09, 0x53, 0xd0, 0x51, 0xcd, 0x60, 0xe0, 0xe7, 0xba, 0x70, 0xe1, 0x8c,
     0x7c, 0x82, 0xfd, 0xc7, 0x83, 0xd1, 0xef, 0xa3, 0x0c, 0x81, 0x32, 0xc8, 0x78, 0x3e, 0xf8, 0xa1,
@@ -474,6 +477,81 @@ impl AES {
     }
 }
 
+pub struct AesEncryptor<'a, 'b, I: Iterator<Item = u8>> {
+    iterator: &'a mut I,
+    encrypted: VecDeque<u8>,
+    unencrypted: VecDeque<u8>,
+    aes: &'b AES,
+}
+
+impl<'a, 'b, I: Iterator<Item = u8>> Iterator for AesEncryptor<'a, 'b, I> {
+    type Item = u8;
+    fn next(&mut self) -> Option<u8> {
+        if self.encrypted.len() > 0 {
+            self.encrypted.pop_front()
+        } else {
+            while let Some(item) = self.iterator.next() {
+                self.unencrypted.push_back(item);
+                if self.unencrypted.len() >= 16 {
+                    self.encrypted.append(&mut VecDeque::from(
+                        self.aes.encrypt(&self.unencrypted.drain(0..16).collect()),
+                    ));
+                    return self.encrypted.pop_front();
+                }
+            }
+            None
+        }
+    }
+}
+
+pub struct AesDecryptor<'a, 'b, I: Iterator<Item = u8>> {
+    iterator: &'a mut I,
+    encrypted: VecDeque<u8>,
+    unencrypted: VecDeque<u8>,
+    aes: &'b AES,
+}
+
+impl<'a, 'b, I: Iterator<Item = u8>> Iterator for AesDecryptor<'a, 'b, I> {
+    type Item = u8;
+    fn next(&mut self) -> Option<u8> {
+        if self.unencrypted.len() > 0 {
+            self.unencrypted.pop_front()
+        } else {
+            while let Some(item) = self.iterator.next() {
+                self.encrypted.push_back(item);
+                if self.encrypted.len() >= 16 {
+                    self.unencrypted.append(&mut VecDeque::from(
+                        self.aes.decrypt(&self.encrypted.drain(0..16).collect()),
+                    ));
+                    return self.unencrypted.pop_front();
+                }
+            }
+            None
+        }
+    }
+}
+
+impl<'a, 'b, I: Iterator<Item = u8>>
+    Crypt<'a, 'b, I, AES, AesEncryptor<'a, 'b, I>, AesDecryptor<'a, 'b, I>> for I
+{
+    fn encrypt(&'a mut self, crypt: &'b AES) -> AesEncryptor<'a, 'b, I> {
+        AesEncryptor {
+            iterator: self,
+            encrypted: VecDeque::new(),
+            unencrypted: VecDeque::new(),
+            aes: crypt,
+        }
+    }
+    fn decrypt(&'a mut self, crypt: &'b AES) -> AesDecryptor<'a, 'b, I> {
+        AesDecryptor {
+            iterator: self,
+            encrypted: VecDeque::new(),
+            unencrypted: VecDeque::new(),
+            aes: crypt,
+        }
+    }
+}
+
 #[allow(non_snake_case)]
 #[cfg(test)]
 mod tests {
@@ -622,6 +700,36 @@ mod tests {
         let c = aes.encrypt(&plaintext);
         println!("{:?}", c);
         let d = aes.decrypt(&c);
+        println!("{:?}", d);
+        assert_eq!(d, plaintext, "decryption faliure");
+    }
+
+    #[test]
+    fn stream_test_iterator() {
+        // let plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+
+        // Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
+
+        // Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
+
+        // In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
+        let mut plaintext = b"Lorem ipsuojodi oiajwd oij aowdij oiawdj oiajw oidj oawijd om dolor sit amet, consectetur oiajsed ofijweo ifjef jd lkajwdn liuaounund l:".to_vec();
+
+        while plaintext.len() & 15 != 0 {
+            plaintext.pop();
+        }
+
+        let key = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+            0x1c, 0x1d, 0x1e, 0x1f,
+        ];
+
+        let aes = AES::new(&key, AESKeySize::AES256).unwrap();
+        println!("{:?}", plaintext.len());
+        let c: Vec<u8> = plaintext.clone().into_iter().encrypt(&aes).collect();
+        println!("{:?}", c);
+        let d: Vec<u8> = c.clone().into_iter().decrypt(&aes).collect();
         println!("{:?}", d);
         assert_eq!(d, plaintext, "decryption faliure");
     }
