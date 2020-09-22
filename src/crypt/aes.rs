@@ -562,9 +562,11 @@ impl<'a, 'b, I: Iterator<Item = u8>> AesDecryptor<'a, 'b, I> {
 impl<'a, 'b, I: Iterator<Item = u8>> Iterator for AesDecryptor<'a, 'b, I> {
     type Item = u8;
     fn next(&mut self) -> Option<u8> {
+        // If there is no available bytes, get more
         if self.decrypted.len() == 0 {
             self.decrypt_next_block();
         }
+        // Pop the front, if the queue is emty, returns none (the iterator is exhausted)
         self.decrypted.pop_front()
     }
 }
