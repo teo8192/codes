@@ -1,10 +1,13 @@
 /// The Advanced Encryption Standard, according to NIST FIPS 197
 pub mod aes;
+pub use aes::{AesEncryptor, AesDecryptor, AES, AESKeySize};
 
 /// Naive textbook implementation of RSA.
 pub mod rsa;
 
-pub trait Crypt<'a, 'b, I: Iterator<Item = u8>, T, E: Iterator<Item=u8>, D: Iterator<Item=u8>> {
-    fn encrypt(&'a mut self, crypt: &'b T) -> E;
-    fn decrypt(&'a mut self, crypt: &'b T) -> D;
+pub trait Crypt<'a, 'b, C, I, E: Iterator<Item = I>, D: Iterator<Item = I>>:
+    Iterator<Item = I>
+{
+    fn encrypt(&'a mut self, crypt: &'b C) -> E;
+    fn decrypt(&'a mut self, crypt: &'b C) -> D;
 }
