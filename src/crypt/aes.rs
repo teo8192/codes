@@ -54,37 +54,18 @@ struct Block {
 
 #[allow(dead_code)]
 impl Block {
-    pub fn new(bytes: &[u8; 16]) -> Self {
-        // assert!(bytes.len() <= 16);
-        // TODO: pad block
-        let mut data = Box::new([0u8; 16]);
-        for i in 0..16 {
-            data[i] = bytes[i];
-        }
-
-        Block { data }
-    }
-
-    pub fn empty() -> Self {
+    /// Creates a new empty block, filled with zeros
+    pub fn new() -> Self {
         Block {
             data: Box::new([0u8; 16]),
         }
     }
 
+    /// Copy the content of another block into this block.
     pub fn copy(&mut self, other: &Block) {
         for i in 0..16 {
             self.data[i] = other.data[i];
         }
-    }
-
-    pub fn bitxor_assign(&mut self, other: &Block) {
-        for i in 0..16 {
-            self.data[i] ^= other.data[i];
-        }
-    }
-
-    fn to_vec(&self) -> Vec<u8> {
-        self.data.to_vec()
     }
 
     /// Transpose thoe block.
@@ -93,14 +74,16 @@ impl Block {
     /// but a transpose will flip all this.
     /// So a transpose is needed before and after each encryption/decryption (no need from user,
     /// only internal use).
-    fn transpose(&mut self) {
+    fn transpose(&mut self) -> &mut Self {
         let mut out = [0u8; 16];
         for x in 0..4 {
             for y in 0..4 {
                 out[x + y * 4] = self.data[y + x * 4];
             }
         }
-        *self.data = out
+        *self.data = out;
+
+        self
     }
 
     /// Multiply two polynomials togeather over the finite field GF(2^8)
@@ -141,7 +124,7 @@ impl Block {
     /// Use S-box to substitute bytes.
     /// could be implementeted as the multiplicative inverse and
     /// a specific affine transformation
-    fn sub_bytes(&mut self, inverse: bool) {
+    fn sub_bytes(&mut self, inverse: bool) -> &mut Self {
         for i in 0..16 {
             let idx = (self.data[i] >> 4) | (self.data[i] << 4);
             self.data[i] = if inverse {
@@ -150,12 +133,14 @@ impl Block {
                 S_BOX[idx as usize]
             };
         }
+
+        self
     }
 
     /// Shift the rows.
     /// row n shifted n times, start from 0.
     /// inverse is just the other way.
-    fn shift_rows(&mut self, inverse: bool) {
+    fn shift_rows(&mut self, inverse: bool) -> &mut Self {
         for i in 0..4 {
             let mut buf = [0u8; 4];
             for j in 0..4 {
@@ -170,10 +155,12 @@ impl Block {
                 self.data[j + i * 4] = buf[j];
             }
         }
+
+        self
     }
 
     /// Hoenstly, this just mixes up the columns (but not across the different columns).
-    fn mix_columns(&mut self, inverse: bool) {
+    fn mix_columns(&mut self, inverse: bool) -> &mut Self {
         let s = self.data.clone();
         let get_col_idx = |c, idx| s[c + idx as usize * 4];
 
@@ -192,15 +179,19 @@ impl Block {
                     ^ Block::multiply_bytes(matrix[(idx + 3) & 3], get_col_idx(c, 3));
             }
         }
+
+        self
     }
 
     /// apply the 16 byte round key
-    fn add_round_key(&mut self, w: &[u8]) {
+    fn add_round_key(&mut self, w: &[u8]) -> &mut Self {
         for x in 0..4 {
             for y in 0..4 {
                 self.data[x + y * 4] ^= w[x * 4 + y];
             }
         }
+
+        self
     }
 }
 
@@ -216,6 +207,14 @@ impl std::iter::FromIterator<u8> for Block {
             i += 1;
         }
         Block { data: bytes }
+    }
+}
+
+impl From<&[u8; 16]> for Block {
+    fn from(bytes: &[u8; 16]) -> Self {
+        Block {
+            data: Box::new(*bytes),
+        }
     }
 }
 
@@ -243,6 +242,17 @@ impl From<Block> for Vec<u8> {
 
 impl From<&Block> for Vec<u8> {
     fn from(block: &Block) -> Self {
+        let mut new = Vec::with_capacity(16);
+        for b in block.data.iter() {
+            new.push(*b);
+        }
+
+        new
+    }
+}
+
+impl From<&mut Block> for Vec<u8> {
+    fn from(block: &mut Block) -> Self {
         let mut new = Vec::with_capacity(16);
         for b in block.data.iter() {
             new.push(*b);
@@ -300,6 +310,8 @@ impl AES {
         AES { w, nr }
     }
 
+    /// this is from the [NIST FIPS 197, AES](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf) paper.
+    /// Look there for more details.
     fn key_expansion(key: &[u8], w: &mut Vec<u8>, nk: usize, nr: usize) {
         fn subword(a: &[u8; 4]) -> [u8; 4] {
             let mut bytes = [0u8; 4];
@@ -358,58 +370,53 @@ impl AES {
             }
         }
     }
-
-    /// Encrypt a single block
-    fn cipher(&self, mut input: Block) -> Block {
-        input.transpose();
-        // let mut state = transpose(&input);
-        input.add_round_key(&self.w[0..16]);
-
-        for round in 1..self.nr {
-            input.sub_bytes(false);
-            input.shift_rows(false);
-            input.mix_columns(false);
-            input.add_round_key(&self.w[(round * 16)..((round + 1) * 16)]);
-        }
-
-        input.sub_bytes(false);
-        input.shift_rows(false);
-        input.add_round_key(&self.w[(self.nr * 16)..((self.nr + 1) * 16)]);
-
-        input.transpose();
-
-        input
-    }
-
-    /// decrypt a block
-    fn inv_cipher(&self, mut input: Block) -> Block {
-        input.transpose();
-
-        input.add_round_key(&self.w[(self.nr * 16)..((self.nr + 1) * 16)]);
-
-        for round in (1..self.nr).rev() {
-            input.shift_rows(true);
-            input.sub_bytes(true);
-            input.add_round_key(&self.w[(round * 16)..((round + 1) * 16)]);
-            input.mix_columns(true);
-        }
-
-        input.shift_rows(true);
-        input.sub_bytes(true);
-        input.add_round_key(&self.w[0..16]);
-
-        input.transpose();
-
-        input
-    }
 }
 
 impl BlockCipher for AES {
     fn encrypt_block(&self, block: Vec<u8>) -> Vec<u8> {
-        Vec::from(self.cipher(Block::from(block)))
+        let mut input = Block::from(block);
+
+        input.transpose().add_round_key(&self.w[0..16]);
+
+        for round in 1..self.nr {
+            input
+                .sub_bytes(false)
+                .shift_rows(false)
+                .mix_columns(false)
+                .add_round_key(&self.w[(round * 16)..((round + 1) * 16)]);
+        }
+
+        Vec::from(
+            input
+                .sub_bytes(false)
+                .shift_rows(false)
+                .add_round_key(&self.w[(self.nr * 16)..((self.nr + 1) * 16)])
+                .transpose(),
+        )
     }
+
     fn decrypt_block(&self, block: Vec<u8>) -> Vec<u8> {
-        Vec::from(self.inv_cipher(Block::from(block)))
+        let mut input = Block::from(block);
+
+        input
+            .transpose()
+            .add_round_key(&self.w[(self.nr * 16)..((self.nr + 1) * 16)]);
+
+        for round in (1..self.nr).rev() {
+            input
+                .shift_rows(true)
+                .sub_bytes(true)
+                .add_round_key(&self.w[(round * 16)..((round + 1) * 16)])
+                .mix_columns(true);
+        }
+
+        Vec::from(
+            input
+                .shift_rows(true)
+                .sub_bytes(true)
+                .add_round_key(&self.w[0..16])
+                .transpose(),
+        )
     }
     fn block_size(&self) -> usize {
         16
@@ -462,9 +469,9 @@ mod tests {
 
         let content = b"hello motherfuck";
 
-        let c = aes.cipher(Block::new(&content));
+        let c = aes.encrypt_block(content.to_vec());
         println!("{:?}", c.to_vec());
-        let d = aes.inv_cipher(c);
+        let d = aes.decrypt_block(c);
         println!("{:?}", d.to_vec());
         assert_eq!(d.to_vec(), content, "decryption faliure");
     }
@@ -482,14 +489,14 @@ mod tests {
         ];
 
         let aes = AES::new(AESKey::AES256(key));
-        let c = aes.cipher(Block::new(&plaintext));
+        let c = aes.encrypt_block(plaintext.to_vec());
         println!("{:?}", c.to_vec());
         let output = [
             0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf, 0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49,
             0x60, 0x89,
         ];
         assert_eq!(c.to_vec(), output, "encryption faliure");
-        let d = aes.inv_cipher(c);
+        let d = aes.decrypt_block(c);
         println!("{:?}", d.to_vec());
         assert_eq!(d.to_vec(), plaintext, "decryption faliure");
     }
@@ -506,14 +513,14 @@ mod tests {
         ];
 
         let aes = AES::new(AESKey::AES128(key));
-        let c = aes.cipher(Block::new(&plaintext));
+        let c = aes.encrypt_block(plaintext.to_vec());
         println!("{:?}", c.to_vec());
         let output = [
             0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4,
             0xc5, 0x5a,
         ];
         assert_eq!(c.to_vec(), output, "encryption faliure");
-        let d = aes.inv_cipher(c);
+        let d = aes.decrypt_block(c);
         println!("{:?}", d.to_vec());
         assert_eq!(d.to_vec(), plaintext, "decryption faliure");
     }
@@ -530,14 +537,14 @@ mod tests {
         ];
 
         let aes = AES::new(AESKey::AES192(key));
-        let c = aes.cipher(Block::new(&plaintext));
+        let c = aes.encrypt_block(plaintext.to_vec());
         println!("{:?}", c.to_vec());
         let output = [
             0xdd, 0xa9, 0x7c, 0xa4, 0x86, 0x4c, 0xdf, 0xe0, 0x6e, 0xaf, 0x70, 0xa0, 0xec, 0x0d,
             0x71, 0x91,
         ];
         assert_eq!(c.to_vec(), output, "encryption faliure");
-        let d = aes.inv_cipher(c);
+        let d = aes.decrypt_block(c);
         println!("{:?}", d.to_vec());
         assert_eq!(d.to_vec(), plaintext, "decryption faliure");
     }
