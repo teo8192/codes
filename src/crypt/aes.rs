@@ -1,5 +1,4 @@
-use crate::crypt::Crypt;
-use std::collections::VecDeque;
+use crate::crypt::BlockCipher;
 
 const S_BOX: [u8; 256] = [
     0x63, 0xca, 0xb7, 0x04, 0x09, 0x53, 0xd0, 0x51, 0xcd, 0x60, 0xe0, 0xe7, 0xba, 0x70, 0xe1, 0x8c,
@@ -244,28 +243,6 @@ impl From<&Block> for Vec<u8> {
     }
 }
 
-impl From<Block> for VecDeque<u8> {
-    fn from(block: Block) -> Self {
-        let mut new = VecDeque::with_capacity(16);
-        for b in block.data.iter() {
-            new.push_back(*b);
-        }
-
-        new
-    }
-}
-
-impl From<&Block> for VecDeque<u8> {
-    fn from(block: &Block) -> Self {
-        let mut new = VecDeque::with_capacity(16);
-        for b in block.data.iter() {
-            new.push_back(*b);
-        }
-
-        new
-    }
-}
-
 impl std::fmt::Display for Block {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for x in 0..4 {
@@ -434,178 +411,15 @@ impl AES {
     }
 }
 
-pub struct AesEncryptor<'a, 'b, I: Iterator<Item = u8>> {
-    iterator: &'a mut I,
-    encrypted: VecDeque<u8>,
-    next_block: Option<Block>,
-    aes: &'b AES,
-}
-
-impl<'a, 'b, I: Iterator<Item = u8>> AesEncryptor<'a, 'b, I> {
-    fn encrypt_next_block(&mut self) {
-        let mut block: Vec<u8> = self.iterator.take(16).collect();
-        let leave = block.len(); //< how many bytes top leave in the next block
-
-        if leave == 0 {
-            if let Some(next) = &self.next_block {
-                self.encrypted.append(&mut VecDeque::from(next));
-                self.next_block = None;
-            }
-            return;
-        }
-
-        if leave < 16 {
-            block.append(&mut std::iter::repeat(0u8).take(16 - leave).collect());
-        }
-
-        let mut block = Block::from(block);
-
-        if let Some(next) = &self.next_block {
-            block.bitxor_assign(&next);
-            let block = self.aes.cipher(block);
-            self.next_block = if leave == 16 {
-                self.encrypted.append(&mut VecDeque::from(next));
-                Some(block)
-            } else {
-                let mut vec = block.to_vec();
-                vec.append(&mut next.to_vec().into_iter().take(leave).collect());
-                self.encrypted.append(&mut VecDeque::from(vec));
-                None
-            };
-        } else {
-            // this is the first time, so bootstrap that motherfucker
-            let block = self.aes.cipher(block);
-            self.next_block = Some(block);
-            self.encrypt_next_block();
-        }
+impl BlockCipher for AES {
+    fn encrypt_block(&self, block: Vec<u8>) -> Vec<u8> {
+        Vec::from(self.cipher(Block::from(block)))
     }
-}
-
-impl<'a, 'b, I: Iterator<Item = u8>> Iterator for AesEncryptor<'a, 'b, I> {
-    type Item = u8;
-    fn next(&mut self) -> Option<u8> {
-        if self.encrypted.len() == 0 {
-            self.encrypt_next_block();
-        }
-        self.encrypted.pop_front()
+    fn decrypt_block(&self, block: Vec<u8>) -> Vec<u8> {
+        Vec::from(self.inv_cipher(Block::from(block)))
     }
-}
-
-pub struct AesDecryptor<'a, 'b, I: Iterator<Item = u8>> {
-    iterator: &'a mut I,
-    decrypted: VecDeque<u8>,
-    current_block: Block,
-    next_block: Option<Block>,
-    aes: &'b AES,
-}
-
-impl<'a, 'b, I: Iterator<Item = u8>> AesDecryptor<'a, 'b, I> {
-    fn decrypt_next_block(&mut self) {
-        let mut block: Vec<u8> = self.iterator.take(16).collect();
-        let leave = block.len();
-        // If it is at the end (not able to take any bytes from the input)
-        if leave == 0 {
-            if let Some(block) = &self.next_block {
-                // decrypt and apply the IV
-                let mut decrypted = self.aes.inv_cipher(block.clone());
-                decrypted.bitxor_assign(&self.current_block);
-                self.decrypted.append(&mut VecDeque::from(decrypted));
-                self.next_block = None;
-            }
-            return;
-        }
-
-        if leave != 16 {
-            if let Some(next) = &self.next_block {
-                let mut decrypted = Vec::from(self.aes.inv_cipher(next.clone()));
-
-                block.append(&mut decrypted.drain(leave..16).collect());
-
-                for i in 0..leave {
-                    decrypted[i] ^= block[i];
-                }
-
-                let mut omega2decr = self.aes.inv_cipher(Block::from(block));
-                omega2decr.bitxor_assign(&self.current_block);
-                self.decrypted.append(&mut VecDeque::from(omega2decr));
-                self.decrypted.append(&mut VecDeque::from(decrypted));
-
-                self.next_block = None;
-            } else {
-                block.append(&mut std::iter::repeat(0).take(16 - leave).collect());
-                let decr = self.aes.inv_cipher(Block::from(block));
-                self.decrypted.append(&mut VecDeque::from(decr))
-            }
-            return;
-        }
-
-        if let Some(nblock) = &self.next_block {
-            // decrypt and apply the IV
-            let mut decrypted = self.aes.inv_cipher(nblock.clone());
-            decrypted.bitxor_assign(&self.current_block);
-
-            // append the decrypted bytes
-            self.decrypted
-                .append(&mut VecDeque::from(decrypted.to_vec()));
-
-            // set up for next iteration
-            self.current_block = nblock.clone();
-            self.next_block = Some(Block::from(block));
-        } else {
-            // Bootstrap if the next bytes is none
-            self.next_block = Some(Block::from(block));
-            self.decrypt_next_block();
-        }
-    }
-}
-
-impl<'a, 'b, I: Iterator<Item = u8>> Iterator for AesDecryptor<'a, 'b, I> {
-    type Item = u8;
-    fn next(&mut self) -> Option<u8> {
-        // If there is no available bytes, get more
-        if self.decrypted.len() == 0 {
-            self.decrypt_next_block();
-        }
-        // Pop the front, if the queue is emty, returns none (the iterator is exhausted)
-        self.decrypted.pop_front()
-    }
-}
-
-impl<'a, 'b, I: Iterator<Item = u8>>
-    Crypt<'a, 'b, AES, u8, AesEncryptor<'a, 'b, I>, AesDecryptor<'a, 'b, I>> for I
-{
-    /// Encrypt a byte stream that is encrypted with AES with CBC format and using CTS.
-    /// CBC:
-    ///       [plaintext block]     [plaintext block]
-    /// IV - XOR >  \/           |- XOR >  \/
-    ///         [ciphertext]  ---|   [ciphertext] ...
-    ///
-    /// with CTS the end is special.
-    /// Id the bytes at the end does not align to the block size, the missing bytes is borrowed
-    /// from the previous block.
-    /// this is archieved  by setting the ending bytes to 0 and using the IV xor operation as
-    /// usual. this means that the ending bytes from the next to last block is removed (since they
-    /// can be found by decrypting the last block) and the next to last partial block is placed at
-    /// the end of the byte iterator, so they swap places (the swap is not neccecary, it is just
-    /// the way this implementation works).
-    fn encrypt(&'a mut self, crypt: &'b AES) -> AesEncryptor<'a, 'b, I> {
-        AesEncryptor {
-            iterator: self,
-            encrypted: VecDeque::new(),
-            next_block: None,
-            aes: crypt,
-        }
-    }
-
-    /// Decrypt a byte stream that is encrypted with AES with CBC format and using CTS.
-    fn decrypt(&'a mut self, crypt: &'b AES) -> AesDecryptor<'a, 'b, I> {
-        AesDecryptor {
-            iterator: self,
-            decrypted: VecDeque::new(),
-            current_block: Block::empty(),
-            next_block: None,
-            aes: crypt,
-        }
+    fn block_size(&self) -> usize {
+        16
     }
 }
 
@@ -751,6 +565,7 @@ mod tests {
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
         ];
+        use crate::crypt::Crypt;
 
         let aes = AES::new(&key, AESKeySize::AES256).unwrap();
         println!("{:?}", plaintext.len());
