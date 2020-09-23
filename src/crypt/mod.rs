@@ -1,6 +1,6 @@
 /// The Advanced Encryption Standard, according to NIST FIPS 197
 pub mod aes;
-pub use aes::{AesEncryptor, AesDecryptor, AES, AESKeySize};
+pub use aes::{AESKeySize, AES};
 
 /// Naive textbook implementation of RSA.
 pub mod rsa;
