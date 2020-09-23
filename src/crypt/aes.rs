@@ -434,7 +434,7 @@ impl AES {
     }
 }
 
-struct AesEncryptor<'a, 'b, I: Iterator<Item = u8>> {
+pub struct AesEncryptor<'a, 'b, I: Iterator<Item = u8>> {
     iterator: &'a mut I,
     encrypted: VecDeque<u8>,
     next_block: Option<Block>,
@@ -491,7 +491,7 @@ impl<'a, 'b, I: Iterator<Item = u8>> Iterator for AesEncryptor<'a, 'b, I> {
     }
 }
 
-struct AesDecryptor<'a, 'b, I: Iterator<Item = u8>> {
+pub struct AesDecryptor<'a, 'b, I: Iterator<Item = u8>> {
     iterator: &'a mut I,
     decrypted: VecDeque<u8>,
     current_block: Block,
