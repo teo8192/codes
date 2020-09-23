@@ -277,7 +277,7 @@ impl std::fmt::Display for Block {
     }
 }
 
-/// }}}
+// }}}
 
 /// The specification of the key length
 pub enum AESKeySize {
