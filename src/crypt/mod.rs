@@ -1,6 +1,6 @@
 /// The Advanced Encryption Standard, according to NIST FIPS 197
 pub mod aes;
-pub use aes::{AESKeySize, AES};
+pub use aes::{AESKey, AES};
 
 /// Naive textbook implementation of RSA.
 pub mod rsa;
@@ -8,7 +8,7 @@ pub mod rsa;
 use std::collections::VecDeque;
 
 /// Encrypt and decrypt iterators of data.
-/// 
+///
 /// C is a cipher.
 ///
 /// I is the item in the iterator.
@@ -104,7 +104,7 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for BlockEncryptor
 ///
 /// Here AES is used as an example.
 ///
-///     # use codes::crypt::{Crypt, AES, AESKeySize, BlockCipher};
+///     # use codes::crypt::{Crypt, AES, AESKey, BlockCipher};
 ///     # let plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.".to_vec();
 ///     # let mut key = [0u8;32];
 ///     # let mut seed = 3422334usize;
@@ -114,7 +114,7 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for BlockEncryptor
 ///         # seed *= 1234;
 ///         # seed >>= 10;
 ///     # }
-///     let aes = AES::new(&key[..], AESKeySize::AES256).expect("could not create key.");
+///     let aes = AES::new(AESKey::AES256(key));
 ///     # let encrypted: Vec<u8> = plaintext.into_iter().encrypt(&aes).collect();
 ///     let decrypted: Vec<u8> = encrypted
 ///         .into_iter()

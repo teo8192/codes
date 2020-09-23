@@ -257,10 +257,10 @@ impl std::fmt::Display for Block {
 // }}}
 
 /// The specification of the key length
-pub enum AESKeySize {
-    AES128,
-    AES192,
-    AES256,
+pub enum AESKey {
+    AES128([u8;16]),
+    AES192([u8;24]),
+    AES256([u8;32]),
 }
 
 /// The key AES key.
@@ -276,35 +276,19 @@ impl AES {
     /// Initialize the AES-thingy with the specified key.
     /// The key needs to be exactly the correct size,
     /// e.g. if you want 128, use exactly 16 bytes, 24 for 192, 32 for 256
-    pub fn new(key: &[u8], key_size: AESKeySize) -> Result<AES, &str> {
-        use AESKeySize::*;
-        let ks = match &key_size {
-            AES128 => 128,
-            AES192 => 192,
-            AES256 => 256,
-        };
-
-        if key.len() != (ks >> 3) {
-            println!("{} {}", key.len(), ks);
-            return Err("Key size does not match");
-        }
-        let nr = match &key_size {
-            AES128 => 10,
-            AES192 => 12,
-            AES256 => 14,
-        };
-
-        let nk = match &key_size {
-            AES128 => 4,
-            AES192 => 6,
-            AES256 => 8,
+    pub fn new(key_size: AESKey) -> AES {
+        use AESKey::*;
+        let (key, nr, nk) = match &key_size {
+            AES128(key) => (&key[..], 10, 4),
+            AES192(key) => (&key[..], 12, 6),
+            AES256(key) => (&key[..], 14, 8),
         };
 
         // 16 = 4 * Nb
         let mut w = vec![0u8; 16 * (nr + 1)];
         AES::key_expansion(&key, &mut w, nk, nr);
 
-        Ok(AES { w, nr })
+        AES { w, nr }
     }
 
     fn key_expansion(key: &[u8], w: &mut Vec<u8>, nk: usize, nr: usize) {
@@ -465,7 +449,7 @@ mod tests {
             0x09, 0x14, 0xdf, 0xf4,
         ];
 
-        let aes = AES::new(&key, AESKeySize::AES256).unwrap();
+        let aes = AES::new(AESKey::AES256(key));
 
         let content = b"hello motherfuck";
 
@@ -488,7 +472,7 @@ mod tests {
             0x1c, 0x1d, 0x1e, 0x1f,
         ];
 
-        let aes = AES::new(&key, AESKeySize::AES256).unwrap();
+        let aes = AES::new(AESKey::AES256(key));
         let c = aes.cipher(Block::new(&plaintext));
         println!("{:?}", c.to_vec());
         let output = [
@@ -512,7 +496,7 @@ mod tests {
             0x0e, 0x0f,
         ];
 
-        let aes = AES::new(&key, AESKeySize::AES128).unwrap();
+        let aes = AES::new(AESKey::AES128(key));
         let c = aes.cipher(Block::new(&plaintext));
         println!("{:?}", c.to_vec());
         let output = [
@@ -536,7 +520,7 @@ mod tests {
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
         ];
 
-        let aes = AES::new(&key, AESKeySize::AES192).unwrap();
+        let aes = AES::new(AESKey::AES192(key));
         let c = aes.cipher(Block::new(&plaintext));
         println!("{:?}", c.to_vec());
         let output = [
@@ -567,7 +551,7 @@ mod tests {
         ];
         use crate::crypt::Crypt;
 
-        let aes = AES::new(&key, AESKeySize::AES256).unwrap();
+        let aes = AES::new(AESKey::AES256(key));
         println!("{:?}", plaintext.len());
         let c: Vec<u8> = plaintext.clone().into_iter().encrypt(&aes).collect();
         println!("{:?}, {}", c, c.len());
