@@ -373,6 +373,9 @@ impl AES {
 }
 
 impl BlockCipher for AES {
+    /// Encrypt a block of data. The length of the block should always be the blocksize.
+    /// if not, this will crash (since in that case it tries to acsess elements of the vector that
+    /// is out of bounds).
     fn encrypt_block(&self, block: Vec<u8>) -> Vec<u8> {
         let mut input = Block::from(block);
 
@@ -395,6 +398,9 @@ impl BlockCipher for AES {
         )
     }
 
+    /// Decrypt a block of data.
+    /// The block has to be the blocksize.
+    /// If it is larger, the rest is ignored. If it is shorter, it will crash.
     fn decrypt_block(&self, block: Vec<u8>) -> Vec<u8> {
         let mut input = Block::from(block);
 
@@ -418,6 +424,7 @@ impl BlockCipher for AES {
                 .transpose(),
         )
     }
+
     fn block_size(&self) -> usize {
         16
     }
