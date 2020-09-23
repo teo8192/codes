@@ -7,19 +7,34 @@ pub mod rsa;
 
 use std::collections::VecDeque;
 
+/// Encrypt and decrypt iterators of data.
+/// 
+/// C is a cipher.
+///
+/// I is the item in the iterator.
+///
+/// E is the encryptor structure.
+/// It needs to be an iterator itself.
+///
+/// D is the decryptor structure.
+/// It also needs to be an iterator.
 pub trait Crypt<'a, 'b, C, I, E: Iterator<Item = I>, D: Iterator<Item = I>>:
     Iterator<Item = I>
 {
+    /// Take a cipher and return an encrypted iterator.
     fn encrypt(&'a mut self, crypt: &'b C) -> E;
+    /// Take a cipher and return a decrypted iterator.
     fn decrypt(&'a mut self, crypt: &'b C) -> D;
 }
 
+/// Any block cipher implementingthis trait may be used with the implementation of CBC with CTS.
 pub trait BlockCipher {
     fn encrypt_block(&self, block: Vec<u8>) -> Vec<u8>;
     fn decrypt_block(&self, block: Vec<u8>) -> Vec<u8>;
     fn block_size(&self) -> usize; // Block size takes self, in case it is dependent on key (e.g. vignere cipher)
 }
 
+/// The block encryptor struct that is returned when encrypting an iterator.
 pub struct BlockEncryptor<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> {
     iterator: &'a mut I,
     encrypted: VecDeque<u8>,
@@ -86,6 +101,8 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for BlockEncryptor
 }
 
 /// Decrypt an encrypted byte stream.
+///
+/// Here AES is used as an example.
 ///
 ///     # use codes::crypt::{Crypt, AES, AESKeySize, BlockCipher};
 ///     # let plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.".to_vec();
