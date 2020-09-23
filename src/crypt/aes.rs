@@ -1,5 +1,12 @@
 use crate::crypt::BlockCipher;
 
+// {{{ constant substitution boxes.
+// these should probably be removed, and replaced by a coputational alternative.
+// This is to avoid timing attacks.  These timing attacks is possible since maybe
+// only parts of the substitution box is used several times, and thus is in the cache. Then they
+// would be faster to load again, and it is possible to guess when it is reused. I think, I am
+// currently no expert on this kind of timing attack against AES.
+
 const S_BOX: [u8; 256] = [
     0x63, 0xca, 0xb7, 0x04, 0x09, 0x53, 0xd0, 0x51, 0xcd, 0x60, 0xe0, 0xe7, 0xba, 0x70, 0xe1, 0x8c,
     0x7c, 0x82, 0xfd, 0xc7, 0x83, 0xd1, 0xef, 0xa3, 0x0c, 0x81, 0x32, 0xc8, 0x78, 0x3e, 0xf8, 0xa1,
@@ -37,6 +44,8 @@ const INV_S_BOX: [u8; 256] = [
     0xd7, 0xe9, 0xc3, 0xd1, 0xb6, 0x9d, 0x45, 0x8a, 0xe6, 0xdf, 0xbe, 0x5a, 0xec, 0x9c, 0x99, 0x0c,
     0xfb, 0xcb, 0x4e, 0x25, 0x92, 0x84, 0x06, 0x6b, 0x73, 0x6e, 0x1b, 0xf4, 0x5f, 0xef, 0x61, 0x7d,
 ];
+
+// }}}
 
 #[derive(Clone)]
 struct Block {
@@ -258,9 +267,9 @@ impl std::fmt::Display for Block {
 
 /// The specification of the key length
 pub enum AESKey {
-    AES128([u8;16]),
-    AES192([u8;24]),
-    AES256([u8;32]),
+    AES128([u8; 16]),
+    AES192([u8; 24]),
+    AES256([u8; 32]),
 }
 
 /// The key AES key.
