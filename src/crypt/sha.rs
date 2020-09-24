@@ -182,7 +182,7 @@ macro_rules! create_box {
     }};
 }
 
-fn sha384<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 48]> {
+pub fn sha384<I: Iterator<Item = u8>>(input: &mut I) -> Box<[u8; 48]> {
     let mut iv = [
         0xcbbb9d5dc1059ed8,
         0x629a292a367cd507,
@@ -199,7 +199,7 @@ fn sha384<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 48]> {
     create_box!(iv, 384, u64)
 }
 
-fn sha512<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 64]> {
+pub fn sha512<I: Iterator<Item = u8>>(input: &mut I) -> Box<[u8; 64]> {
     let mut iv = [
         0x6a09e667f3bcc908,
         0xbb67ae8584caa73b,
@@ -215,7 +215,7 @@ fn sha512<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 64]> {
     create_box!(iv, 512, u64)
 }
 
-fn sha512_256<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 32]> {
+pub fn sha512_256<I: Iterator<Item = u8>>(input: &mut I) -> Box<[u8; 32]> {
     let mut iv = [
         0x22312194FC2BF72C,
         0x9F555FA3C84C64C2,
@@ -232,7 +232,7 @@ fn sha512_256<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 32]> {
     create_box!(iv, 256, u64)
 }
 
-fn sha512_224<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 28]> {
+pub fn sha512_224<I: Iterator<Item = u8>>(input: &mut I) -> Box<[u8; 28]> {
     let mut iv = [
         0x8C3D37C819544DA2,
         0x73E1996689DCD4D6,
@@ -249,7 +249,7 @@ fn sha512_224<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 28]> {
     create_box!(iv, 224, u64)
 }
 
-fn sha512_base<I: Iterator<Item=u8>>(input: &mut I, iv: &mut [u64; 8]) {
+fn sha512_base<I: Iterator<Item = u8>>(input: &mut I, iv: &mut [u64; 8]) {
     let mut at_end = false;
     let mut added_one = false;
     let mut counter = 0u128;
@@ -327,12 +327,12 @@ fn sha512_base<I: Iterator<Item=u8>>(input: &mut I, iv: &mut [u64; 8]) {
             b = a;
             a = sum!(t_1, t_2);
 
-//             if t == 79 {
-//                 println!("A/E: {:016X} {:016X}", a, e);
-//                 println!("B/F: {:016X} {:016X}", b, f);
-//                 println!("C/G: {:016X} {:016X}", c, g);
-//                 println!("D/H: {:016X} {:016X}", d, h);
-//             }
+            //             if t == 79 {
+            //                 println!("A/E: {:016X} {:016X}", a, e);
+            //                 println!("B/F: {:016X} {:016X}", b, f);
+            //                 println!("C/G: {:016X} {:016X}", c, g);
+            //                 println!("D/H: {:016X} {:016X}", d, h);
+            //             }
         }
 
         iv[0] = sum!(a, iv[0]);
@@ -366,7 +366,7 @@ mod tests {
 
         let input = b"abc";
 
-        let output = sha512(&mut input.iter().map(|x|*x));
+        let output = sha512(&mut input.iter().map(|x| *x));
 
         assert_eq!(result[..], output[..]);
     }
@@ -398,7 +398,7 @@ Accusantium corrupti dolor adipisci quisquam dolorum qui aut eos. Adipisci enim 
 
 Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occaecati. Molestiae iusto soluta voluptas quisquam vero a adipisci exercitationem. Consectetur harum sint ea. Distinctio et vero repellendus a.".to_vec();
 
-        let hash = sha512_256(&mut input.iter().map(|x|*x));
+        let hash = sha512_256(&mut input.iter().map(|x| *x));
 
         let expected = [
             0x09, 0xa4, 0xa7, 0xff, 0x2e, 0xa4, 0x7b, 0xa4, 0x2d, 0xd0, 0x63, 0xf5, 0x5a, 0xde,
@@ -444,7 +444,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0xEC, 0xA1, 0x34, 0xC8, 0x25, 0xA7,
         ];
 
-        let output = sha384(&mut b"abc".iter().map(|x|*x));
+        let output = sha384(&mut b"abc".iter().map(|x| *x));
 
         assert_eq!(result[..], output[..]);
     }
@@ -470,7 +470,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0x42, 0xE2, 0x0E, 0x37, 0xED, 0x26, 0x5C, 0xEE, 0xE9, 0xA4, 0x3E, 0x89, 0x24, 0xAA,
         ];
 
-        let output = sha512_224(&mut b"abc".iter().map(|x|*x));
+        let output = sha512_224(&mut b"abc".iter().map(|x| *x));
 
         assert_eq!(result[..], output[..]);
     }
