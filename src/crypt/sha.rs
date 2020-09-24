@@ -182,7 +182,7 @@ macro_rules! create_box {
     }};
 }
 
-fn sha384(input: Vec<u8>) -> Box<[u8; 48]> {
+fn sha384<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 48]> {
     let mut iv = [
         0xcbbb9d5dc1059ed8,
         0x629a292a367cd507,
@@ -199,7 +199,7 @@ fn sha384(input: Vec<u8>) -> Box<[u8; 48]> {
     create_box!(iv, 384, u64)
 }
 
-fn sha512(input: Vec<u8>) -> Box<[u8; 64]> {
+fn sha512<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 64]> {
     let mut iv = [
         0x6a09e667f3bcc908,
         0xbb67ae8584caa73b,
@@ -215,7 +215,7 @@ fn sha512(input: Vec<u8>) -> Box<[u8; 64]> {
     create_box!(iv, 512, u64)
 }
 
-fn sha512_256(input: Vec<u8>) -> Box<[u8; 32]> {
+fn sha512_256<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 32]> {
     let mut iv = [
         0x22312194FC2BF72C,
         0x9F555FA3C84C64C2,
@@ -232,7 +232,7 @@ fn sha512_256(input: Vec<u8>) -> Box<[u8; 32]> {
     create_box!(iv, 256, u64)
 }
 
-fn sha512_224(input: Vec<u8>) -> Box<[u8; 28]> {
+fn sha512_224<I: Iterator<Item=u8>>(input: &mut I) -> Box<[u8; 28]> {
     let mut iv = [
         0x8C3D37C819544DA2,
         0x73E1996689DCD4D6,
@@ -249,18 +249,18 @@ fn sha512_224(input: Vec<u8>) -> Box<[u8; 28]> {
     create_box!(iv, 224, u64)
 }
 
-fn sha512_base(mut input: Vec<u8>, iv: &mut [u64; 8]) {
-    let mut at_end = input.len() == 0;
+fn sha512_base<I: Iterator<Item=u8>>(input: &mut I, iv: &mut [u64; 8]) {
+    let mut at_end = false;
     let mut added_one = false;
-    let l = (input.len() as u128) << 3;
+    let mut counter = 0u128;
 
     while !at_end {
         let mut m = [0u64; 16];
-        let end = min!(128, input.len());
-        let mut bytes: Vec<u8> = input.drain(0..end).collect();
+        let mut bytes: Vec<u8> = input.take(128).collect();
 
         if bytes.len() < 128 {
             if !added_one {
+                counter += (bytes.len() as u128) << 3;
                 bytes.push(1 << 7);
                 added_one = true;
             }
@@ -274,9 +274,11 @@ fn sha512_base(mut input: Vec<u8>, iv: &mut [u64; 8]) {
                     bytes.push(0);
                 }
 
-                bytes.append(&mut l.to_be_bytes().to_vec());
+                bytes.append(&mut counter.to_be_bytes().to_vec());
                 at_end = true;
             }
+        } else {
+            counter += 1024;
         }
 
         for i in 0..16 {
@@ -362,14 +364,16 @@ mod tests {
             0x2a, 0x9a, 0xc9, 0x4f, 0xa5, 0x4c, 0xa4, 0x9f,
         ];
 
-        let output = sha512(b"abc".to_vec());
+        let input = b"abc";
+
+        let output = sha512(&mut input.iter().map(|x|*x));
 
         assert_eq!(result[..], output[..]);
     }
 
     #[test]
     fn test_multiline_b() {
-        let hash = sha512((0x61..0x6f).flat_map(|i| i..(i + 8)).collect());
+        let hash = sha512(&mut (0x61..0x6f).flat_map(|i| i..(i + 8)));
 
         let expected = [
             0x8E, 0x95, 0x9B, 0x75, 0xDA, 0xE3, 0x13, 0xDA, 0x8C, 0xF4, 0xF7, 0x28, 0x14, 0xFC,
@@ -394,7 +398,7 @@ Accusantium corrupti dolor adipisci quisquam dolorum qui aut eos. Adipisci enim 
 
 Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occaecati. Molestiae iusto soluta voluptas quisquam vero a adipisci exercitationem. Consectetur harum sint ea. Distinctio et vero repellendus a.".to_vec();
 
-        let hash = sha512_256(input);
+        let hash = sha512_256(&mut input.iter().map(|x|*x));
 
         let expected = [
             0x09, 0xa4, 0xa7, 0xff, 0x2e, 0xa4, 0x7b, 0xa4, 0x2d, 0xd0, 0x63, 0xf5, 0x5a, 0xde,
@@ -413,7 +417,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0x07, 0xE7, 0xAF, 0x23,
         ];
 
-        let output = sha512_256(b"abc".to_vec());
+        let output = sha512_256(&mut b"abc".iter().map(|x| *x));
 
         assert_eq!(result[..], output[..]);
     }
@@ -426,7 +430,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0xE1, 0x9B, 0x56, 0x3A,
         ];
 
-        let output = sha512_256((0x61..0x6f).flat_map(|i| i..(i + 8)).collect());
+        let output = sha512_256(&mut (0x61..0x6f).flat_map(|i| i..(i + 8)));
 
         assert_eq!(result[..], output[..]);
     }
@@ -440,7 +444,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0xEC, 0xA1, 0x34, 0xC8, 0x25, 0xA7,
         ];
 
-        let output = sha384(b"abc".to_vec());
+        let output = sha384(&mut b"abc".iter().map(|x|*x));
 
         assert_eq!(result[..], output[..]);
     }
@@ -454,7 +458,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0xE9, 0xFA, 0x91, 0x74, 0x60, 0x39,
         ];
 
-        let output = sha384((0x61..0x6f).flat_map(|i| i..(i + 8)).collect());
+        let output = sha384(&mut (0x61..0x6f).flat_map(|i| i..(i + 8)));
 
         assert_eq!(result[..], output[..]);
     }
@@ -466,7 +470,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0x42, 0xE2, 0x0E, 0x37, 0xED, 0x26, 0x5C, 0xEE, 0xE9, 0xA4, 0x3E, 0x89, 0x24, 0xAA,
         ];
 
-        let output = sha512_224(b"abc".to_vec());
+        let output = sha512_224(&mut b"abc".iter().map(|x|*x));
 
         assert_eq!(result[..], output[..]);
     }
@@ -478,7 +482,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0x45, 0x33, 0x35, 0xD6, 0x64, 0x73, 0x4F, 0xE4, 0x0E, 0x72, 0x68, 0x67, 0x4A, 0xF9,
         ];
 
-        let output = sha512_224((0x61..0x6f).flat_map(|i| i..(i + 8)).collect());
+        let output = sha512_224(&mut (0x61..0x6f).flat_map(|i| i..(i + 8)));
 
         assert_eq!(result[..], output[..]);
     }
