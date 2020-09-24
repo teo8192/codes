@@ -7,3 +7,7 @@
  - [x] cipher text stealing in encrypt and decrypt iterator.
 
  - [ ] Incorporate the code of Frixxie
+
+# BUGS
+
+ - [ ] Encrypt and decrypt stream is buggy when encrypting less than a single block. (CTS should not be activated, but i think maybe it is?)

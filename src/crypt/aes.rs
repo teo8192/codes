@@ -420,6 +420,7 @@ impl BlockCipher for AES {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypt::Crypt;
 
     #[test]
     fn test_multiplication() {
@@ -544,6 +545,8 @@ mod tests {
 
     #[test]
     fn stream_test_iterator() {
+        let iv: Vec<u8> = (0..16).collect();
+
         let plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
 
         Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
@@ -553,23 +556,64 @@ mod tests {
         In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
         assert!(plaintext.len() & 15 != 0);
 
+        let mut plaintext = b"balle".to_vec();
+        while plaintext.len() < 16 {
+            plaintext.push(0);
+        }
+
         let key = [
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
         ];
-        use crate::crypt::Crypt;
 
         let aes = AES::new(AESKey::AES256(key));
         println!("{:?}", plaintext.len());
-        let c: Vec<u8> = plaintext.clone().into_iter().encrypt(&aes).collect();
+        let c: Vec<u8> = plaintext
+            .clone()
+            .into_iter()
+            .encrypt(&aes, iv.clone())
+            .collect();
         println!("{:?}, {}", c, c.len());
-        let d: Vec<u8> = c.clone().into_iter().decrypt(&aes).collect();
+        let d: Vec<u8> = c.clone().into_iter().decrypt(&aes, iv).collect();
         println!("{:?}", d);
         assert_ne!(c, d);
         assert_eq!(d, plaintext, "decryption faliure");
         assert_eq!(c.len(), plaintext.len());
 
         println!("{}", plaintext.len());
+    }
+
+    #[test]
+    fn cbc_test() {
+        let iv = (0..16).collect();
+
+        let key = [
+            0x60, 0x3D, 0xEB, 0x10, 0x15, 0xCA, 0x71, 0xBE, 0x2B, 0x73, 0xAE, 0xF0, 0x85, 0x7D,
+            0x77, 0x81, 0x1F, 0x35, 0x2C, 0x07, 0x3B, 0x61, 0x08, 0xD7, 0x2D, 0x98, 0x10, 0xA3,
+            0x09, 0x14, 0xDF, 0xF4,
+        ];
+
+        let ciphertext = [
+            0xF5, 0x8C, 0x4C, 0x04, 0xD6, 0xE5, 0xF1, 0xBA, 0x77, 0x9E, 0xAB, 0xFB, 0x5F, 0x7B,
+            0xFB, 0xD6, 0x9C, 0xFC, 0x4E, 0x96, 0x7E, 0xDB, 0x80, 0x8D, 0x67, 0x9F, 0x77, 0x7B,
+            0xC6, 0x70, 0x2C, 0x7D, 0x39, 0xF2, 0x33, 0x69, 0xA9, 0xD9, 0xBA, 0xCF, 0xA5, 0x30,
+            0xE2, 0x63, 0x04, 0x23, 0x14, 0x61, 0xB2, 0xEB, 0x05, 0xE2, 0xC3, 0x9B, 0xE9, 0xFC,
+            0xDA, 0x6C, 0x19, 0x07, 0x8C, 0x6A, 0x9D, 0x1B,
+        ];
+
+        let plaintext = [
+            0x6B, 0xC1, 0xBE, 0xE2, 0x2E, 0x40, 0x9F, 0x96, 0xE9, 0x3D, 0x7E, 0x11, 0x73, 0x93,
+            0x17, 0x2A, 0xAE, 0x2D, 0x8A, 0x57, 0x1E, 0x03, 0xAC, 0x9C, 0x9E, 0xB7, 0x6F, 0xAC,
+            0x45, 0xAF, 0x8E, 0x51, 0x30, 0xC8, 0x1C, 0x46, 0xA3, 0x5C, 0xE4, 0x11, 0xE5, 0xFB,
+            0xC1, 0x19, 0x1A, 0x0A, 0x52, 0xEF, 0xF6, 0x9F, 0x24, 0x45, 0xDF, 0x4F, 0x9B, 0x17,
+            0xAD, 0x2B, 0x41, 0x7B, 0xE6, 0x6C, 0x37, 0x10,
+        ];
+
+        let aes = AES::new(AESKey::AES256(key));
+
+        let encrypted: Vec<u8> = plaintext.to_vec().into_iter().encrypt(&aes, iv).collect();
+
+        assert_eq!(encrypted[..], ciphertext[..]);
     }
 }

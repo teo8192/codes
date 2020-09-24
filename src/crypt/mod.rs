@@ -25,9 +25,9 @@ pub trait Crypt<'a, 'b, C, I, E: Iterator<Item = I>, D: Iterator<Item = I>>:
     Iterator<Item = I>
 {
     /// Take a cipher and return an encrypted iterator.
-    fn encrypt(&'a mut self, crypt: &'b C) -> E;
+    fn encrypt(&'a mut self, crypt: &'b C, iv: Vec<u8>) -> E;
     /// Take a cipher and return a decrypted iterator.
-    fn decrypt(&'a mut self, crypt: &'b C) -> D;
+    fn decrypt(&'a mut self, crypt: &'b C, iv: Vec<u8>) -> D;
 }
 
 /// Any block cipher implementingthis trait may be used with the implementation of CBC with CTS.
@@ -42,6 +42,7 @@ pub struct BlockEncryptor<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> {
     iterator: &'a mut I,
     encrypted: VecDeque<u8>,
     next_block: Option<Vec<u8>>,
+    iv: Vec<u8>,
     cipher: &'b C,
 }
 
@@ -86,6 +87,9 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> BlockEncryptor<'a, 'b, I, C
             };
         } else {
             // this is the first time, so bootstrap that motherfucker
+            for i in 0..self.cipher.block_size() {
+                block[i] ^= self.iv[i];
+            }
             let block = self.cipher.encrypt_block(block);
             self.next_block = Some(block);
             self.encrypt_next_block();
@@ -118,10 +122,14 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for BlockEncryptor
 ///         # seed >>= 10;
 ///     # }
 ///     let aes = AES::new(AESKey::AES256(key));
-///     # let encrypted: Vec<u8> = plaintext.into_iter().encrypt(&aes).collect();
+///     # let encrypted: Vec<u8> = plaintext
+///     #       .into_iter()
+///     #       .encrypt(&aes, (0..16).collect())
+///     #       .collect();
+///     # let iv = (0..16).collect();
 ///     let decrypted: Vec<u8> = encrypted
 ///         .into_iter()
-///         .decrypt(&aes)
+///         .decrypt(&aes, iv)
 ///         .collect();
 ///     assert_eq!(decrypted, b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.".to_vec());
 pub struct BlockDecryptor<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> {
@@ -232,21 +240,22 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher>
     /// can be found by decrypting the last block) and the next to last partial block is placed at
     /// the end of the byte iterator, so they swap places (the swap is not neccecary, it is just
     /// the way this implementation works).
-    fn encrypt(&'a mut self, crypt: &'b C) -> BlockEncryptor<'a, 'b, I, C> {
+    fn encrypt(&'a mut self, crypt: &'b C, iv: Vec<u8>) -> BlockEncryptor<'a, 'b, I, C> {
         BlockEncryptor {
             iterator: self,
             encrypted: VecDeque::new(),
             next_block: None,
+            iv,
             cipher: crypt,
         }
     }
 
     /// Decrypt a byte stream that is encrypted with a block cipher with CBC format and using CTS.
-    fn decrypt(&'a mut self, crypt: &'b C) -> BlockDecryptor<'a, 'b, I, C> {
+    fn decrypt(&'a mut self, crypt: &'b C, iv: Vec<u8>) -> BlockDecryptor<'a, 'b, I, C> {
         BlockDecryptor {
             iterator: self,
             decrypted: VecDeque::new(),
-            current_block: vec![0; crypt.block_size()],
+            current_block: iv, //vec![0; crypt.block_size()],
             next_block: None,
             cipher: crypt,
         }
