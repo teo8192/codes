@@ -5,6 +5,9 @@ pub use aes::{AESKey, AES};
 /// Naive textbook implementation of RSA.
 pub mod rsa;
 
+/// Currently SHA512 implemented by FIPS 180-4 standard.
+pub mod sha;
+
 use std::collections::VecDeque;
 
 /// Encrypt and decrypt iterators of data.
