@@ -229,38 +229,24 @@ impl From<Vec<u8>> for Block {
     }
 }
 
-impl From<Block> for Vec<u8> {
-    fn from(block: Block) -> Self {
-        let mut new = Vec::with_capacity(16);
-        for b in block.data.iter() {
-            new.push(*b);
-        }
+macro_rules! from_block {
+    ( $( $b:ty )* ) => {
+        $(
+            impl From<$b> for Vec<u8> {
+                fn from(block: $b) -> Self {
+                    let mut new = Vec::with_capacity(16);
+                    for b in block.data.iter() {
+                        new.push(*b);
+                    }
 
-        new
-    }
+                    new
+                }
+            }
+        )*
+    };
 }
 
-impl From<&Block> for Vec<u8> {
-    fn from(block: &Block) -> Self {
-        let mut new = Vec::with_capacity(16);
-        for b in block.data.iter() {
-            new.push(*b);
-        }
-
-        new
-    }
-}
-
-impl From<&mut Block> for Vec<u8> {
-    fn from(block: &mut Block) -> Self {
-        let mut new = Vec::with_capacity(16);
-        for b in block.data.iter() {
-            new.push(*b);
-        }
-
-        new
-    }
-}
+from_block!(Block &Block &mut Block);
 
 impl std::fmt::Display for Block {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
