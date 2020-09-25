@@ -10,6 +10,8 @@ pub mod sha;
 
 pub mod pbkdf2;
 
+pub mod hmac;
+
 use std::collections::VecDeque;
 
 /// Encrypt and decrypt iterators of data.
