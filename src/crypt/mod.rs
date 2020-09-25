@@ -9,7 +9,7 @@ pub mod rsa;
 pub mod sha;
 
 mod pbkdf2;
-use pbkdf2::pbkdf2;
+pub use pbkdf2::pbkdf2;
 
 use std::collections::VecDeque;
 
