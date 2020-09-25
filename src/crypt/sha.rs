@@ -11,16 +11,6 @@ macro_rules! sum {
     () => {{}};
 }
 
-macro_rules! min {
-    ($a:expr, $b:expr) => {{
-        if $a < $b {
-            $a
-        } else {
-            $b
-        }
-    }};
-}
-
 macro_rules! rotr {
     ($n:expr, $x:expr) => {{
         $x.rotate_right($n)
