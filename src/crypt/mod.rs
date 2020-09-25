@@ -38,7 +38,7 @@ pub trait BlockCipher {
 }
 
 /// The block encryptor struct that is returned when encrypting an iterator.
-pub struct BlockEncryptor<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> {
+pub struct CBCCTSEncryptor<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> {
     iterator: &'a mut I,
     encrypted: VecDeque<u8>,
     next_block: Option<Vec<u8>>,
@@ -46,7 +46,7 @@ pub struct BlockEncryptor<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> {
     cipher: &'b C,
 }
 
-impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> BlockEncryptor<'a, 'b, I, C> {
+impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> CBCCTSEncryptor<'a, 'b, I, C> {
     fn encrypt_next_block(&mut self) {
         let mut block: Vec<u8> = self.iterator.take(self.cipher.block_size()).collect();
         let leave = block.len(); //< how many bytes top leave in the next block
@@ -97,7 +97,7 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> BlockEncryptor<'a, 'b, I, C
     }
 }
 
-impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for BlockEncryptor<'a, 'b, I, C> {
+impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for CBCCTSEncryptor<'a, 'b, I, C> {
     type Item = u8;
     fn next(&mut self) -> Option<u8> {
         if self.encrypted.len() == 0 {
@@ -132,7 +132,7 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for BlockEncryptor
 ///         .decrypt(&aes, iv)
 ///         .collect();
 ///     assert_eq!(decrypted, b"Lorem ipsum dolor sit amet, consectetur adipiscing elit.".to_vec());
-pub struct BlockDecryptor<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> {
+pub struct CBCCTSDecryptor<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> {
     iterator: &'a mut I,
     decrypted: VecDeque<u8>,
     current_block: Vec<u8>,
@@ -140,7 +140,7 @@ pub struct BlockDecryptor<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> {
     cipher: &'b C,
 }
 
-impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> BlockDecryptor<'a, 'b, I, C> {
+impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> CBCCTSDecryptor<'a, 'b, I, C> {
     fn decrypt_next_block(&mut self) {
         let mut block: Vec<u8> = self.iterator.take(self.cipher.block_size()).collect();
         let leave = block.len();
@@ -214,7 +214,7 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> BlockDecryptor<'a, 'b, I, C
     }
 }
 
-impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for BlockDecryptor<'a, 'b, I, C> {
+impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for CBCCTSDecryptor<'a, 'b, I, C> {
     type Item = u8;
     fn next(&mut self) -> Option<u8> {
         // If there is no available bytes, get more
@@ -227,7 +227,7 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher> Iterator for BlockDecryptor
 }
 
 impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher>
-    Crypt<'a, 'b, C, u8, BlockEncryptor<'a, 'b, I, C>, BlockDecryptor<'a, 'b, I, C>> for I
+    Crypt<'a, 'b, C, u8, CBCCTSEncryptor<'a, 'b, I, C>, CBCCTSDecryptor<'a, 'b, I, C>> for I
 {
     /// Encrypt a byte stream that is encrypted with a block cipher with CBC format and using CTS.
     /// CBC: [Cipher Block Chaining](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_block_chaining_(CBC))
@@ -240,8 +240,8 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher>
     /// can be found by decrypting the last block) and the next to last partial block is placed at
     /// the end of the byte iterator, so they swap places (the swap is not neccecary, it is just
     /// the way this implementation works).
-    fn encrypt(&'a mut self, crypt: &'b C, iv: Vec<u8>) -> BlockEncryptor<'a, 'b, I, C> {
-        BlockEncryptor {
+    fn encrypt(&'a mut self, crypt: &'b C, iv: Vec<u8>) -> CBCCTSEncryptor<'a, 'b, I, C> {
+        CBCCTSEncryptor {
             iterator: self,
             encrypted: VecDeque::new(),
             next_block: None,
@@ -251,8 +251,8 @@ impl<'a, 'b, I: Iterator<Item = u8>, C: BlockCipher>
     }
 
     /// Decrypt a byte stream that is encrypted with a block cipher with CBC format and using CTS.
-    fn decrypt(&'a mut self, crypt: &'b C, iv: Vec<u8>) -> BlockDecryptor<'a, 'b, I, C> {
-        BlockDecryptor {
+    fn decrypt(&'a mut self, crypt: &'b C, iv: Vec<u8>) -> CBCCTSDecryptor<'a, 'b, I, C> {
+        CBCCTSDecryptor {
             iterator: self,
             decrypted: VecDeque::new(),
             current_block: iv, //vec![0; crypt.block_size()],
