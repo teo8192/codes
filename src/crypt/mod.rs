@@ -8,6 +8,9 @@ pub mod rsa;
 /// Currently SHA512 implemented by FIPS 180-4 standard.
 pub mod sha;
 
+mod pbkdf2;
+use pbkdf2::pbkdf2;
+
 use std::collections::VecDeque;
 
 /// Encrypt and decrypt iterators of data.
