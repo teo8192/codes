@@ -10,7 +10,7 @@ pub mod sha;
 
 pub mod pbkdf2;
 
-pub mod hmac;
+pub mod mac;
 
 use std::collections::VecDeque;
 

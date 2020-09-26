@@ -3,7 +3,7 @@ use super::sha::*;
 const HMAC_LEN: usize = 64;
 const SHA512_BLOCKSIZE: usize = 1024 >> 3;
 
-fn hmac(key: &Vec<u8>, text: &Vec<u8>, tag_len: usize) -> Vec<u8> {
+pub fn hmac(key: &Vec<u8>, text: &Vec<u8>, tag_len: usize) -> Vec<u8> {
     debug_assert!(tag_len <= HMAC_LEN, "tag length exceeds hash length");
     let mut k_0 = key.clone();
     if k_0.len() > SHA512_BLOCKSIZE {
