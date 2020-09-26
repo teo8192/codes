@@ -1,3 +1,23 @@
+# About
+
+This is a cryptographic library (mostly made for fun and academic purpose).
+I try to adhere to standards, and verify the implementation by expected output.
+Here is the resources used:
+
+ - For tests: [Cryptographic Standards and Guidelines, Examples with Intermediate Values](https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values)
+ - AES, [NIST FIPS 197](https://csrc.nist.gov/publications/detail/fips/197/final)
+ - Secure Hashing Algorithm (SHA) [NIST FIPS 180-4](https://csrc.nist.gov/publications/detail/fips/180/4/final)
+ - PBKDF2: [RFC8018](https://tools.ietf.org/html/rfc8018)
+
+
+# Stuff to implement
+
+ - [ ] SHA256 fam
+ - [ ] SHA3
+ - [ ] CMAC
+ - [ ] Elliptic curves
+
+
 # Future problems that require future solutions
 
  - [x] Input vector be removed from aes cipher and inv_cipher.
