@@ -277,6 +277,14 @@ pub struct AES {
     nr: usize,
 }
 
+impl Drop for AES {
+    fn drop(&mut self) {
+        for i in 0..self.w.len() {
+            self.w[i] = 0;
+        }
+    }
+}
+
 impl AES {
     /// Initialize the AES-thingy with the specified key.
     /// The key needs to be exactly the correct size,
