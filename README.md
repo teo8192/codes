@@ -16,7 +16,8 @@ Here is some of the resources used:
  - [ ] SHA3
  - [ ] CMAC
  - [ ] Elliptic curves
-
+ - [ ] Message padding like SHA512 for CBC
+ - [ ] CBC in place on mutable vector
 
 # Future problems that require future solutions
 
