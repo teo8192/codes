@@ -2,7 +2,7 @@
 
 This is a cryptographic library (mostly made for fun and academic purpose).
 I try to adhere to standards, and verify the implementation by expected output.
-Here is the resources used:
+Here is some of the resources used:
 
  - For tests: [Cryptographic Standards and Guidelines, Examples with Intermediate Values](https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values)
  - AES, [NIST FIPS 197](https://csrc.nist.gov/publications/detail/fips/197/final)
