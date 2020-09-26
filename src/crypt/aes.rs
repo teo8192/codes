@@ -47,19 +47,19 @@ const INV_S_BOX: [u8; 256] = [
 
 // }}}
 
-#[derive(Clone)]
-struct Block {
-    data: Box<[u8; 16]>,
+// #[derive(Clone)]
+struct Block<'a> {
+    data: &'a mut [u8],
 }
 
 #[allow(dead_code)]
-impl Block {
+impl<'a> Block<'a> {
     /// Creates a new empty block, filled with zeros
-    pub fn new() -> Self {
-        Block {
-            data: Box::new([0u8; 16]),
-        }
-    }
+    // pub fn new() -> Self {
+    //     Block {
+    //         data: Box::new([0u8; 16]),
+    //     }
+    // }
 
     /// Copy the content of another block into this block.
     pub fn copy(&mut self, other: &Block) {
@@ -81,7 +81,10 @@ impl Block {
                 out[x + y * 4] = self.data[y + x * 4];
             }
         }
-        *self.data = out;
+        for i in 0..16 {
+            self.data[i] = out[i];
+            out[i] = 0;
+        }
 
         self
     }
@@ -161,7 +164,10 @@ impl Block {
 
     /// Hoenstly, this just mixes up the columns (but not across the different columns).
     fn mix_columns(&mut self, inverse: bool) -> &mut Self {
-        let s = self.data.clone();
+        let mut s = Vec::new();
+        for b in self.data.iter() {
+            s.push(*b);
+        }
         let get_col_idx = |c, idx| s[c + idx as usize * 4];
 
         // this is a matrix where each row is shifted once from the row above
@@ -197,58 +203,64 @@ impl Block {
 
 // {{{ Generic implementations for Block
 
-impl std::iter::FromIterator<u8> for Block {
-    fn from_iter<I: IntoIterator<Item = u8>>(iter: I) -> Self {
-        let mut bytes = Box::new([0u8; 16]);
-        let mut i = 0;
-        for b in iter {
-            // i want to use enumberate, but I am not allowed (needs an Iterator, not IntoIterator)
-            bytes[i] = b;
-            i += 1;
-        }
-        Block { data: bytes }
-    }
-}
-
-impl From<&[u8; 16]> for Block {
-    fn from(bytes: &[u8; 16]) -> Self {
-        Block {
-            data: Box::new(*bytes),
-        }
-    }
-}
-
-impl From<Vec<u8>> for Block {
-    fn from(bytes: Vec<u8>) -> Self {
-        let mut data = Box::new([0u8; 16]);
-        for i in 0..16 {
-            data[i] = bytes[i];
-        }
-
+impl<'a> From<&'a mut [u8]> for Block<'a> {
+    fn from(data: &'a mut [u8]) -> Self {
         Block { data }
     }
 }
 
-macro_rules! from_block {
-    ( $( $b:ty )* ) => {
-        $(
-            impl From<$b> for Vec<u8> {
-                fn from(block: $b) -> Self {
-                    let mut new = Vec::with_capacity(16);
-                    for b in block.data.iter() {
-                        new.push(*b);
-                    }
+// impl std::iter::FromIterator<u8> for Block {
+//     fn from_iter<I: IntoIterator<Item = u8>>(iter: I) -> Self {
+//         let mut bytes = Box::new([0u8; 16]);
+//         let mut i = 0;
+//         for b in iter {
+//             // i want to use enumberate, but I am not allowed (needs an Iterator, not IntoIterator)
+//             bytes[i] = b;
+//             i += 1;
+//         }
+//         Block { data: bytes[..] }
+//     }
+// }
 
-                    new
-                }
-            }
-        )*
-    };
-}
+// impl From<&[u8; 16]> for Block {
+//     fn from(bytes: &[u8; 16]) -> Self {
+//         Block {
+//             data: Box::new(*bytes),
+//         }
+//     }
+// }
 
-from_block!(Block &Block &mut Block);
+// impl From<Vec<u8>> for Block {
+//     fn from(bytes: Vec<u8>) -> Self {
+//         let mut data = Box::new([0u8; 16]);
+//         for i in 0..16 {
+//             data[i] = bytes[i];
+//         }
 
-impl std::fmt::Display for Block {
+//         Block { data }
+//     }
+// }
+
+// macro_rules! from_block {
+//     ( $( $b:ty )* ) => {
+//         $(
+//             impl From<$b> for Vec<u8> {
+//                 fn from(block: $b) -> Self {
+//                     let mut new = Vec::with_capacity(16);
+//                     for b in block.data.iter() {
+//                         new.push(*b);
+//                     }
+
+//                     new
+//                 }
+//             }
+//         )*
+//     };
+// }
+
+// from_block!(Block &Block &mut Block);
+
+impl<'a> std::fmt::Display for Block<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for x in 0..4 {
             for y in 0..4 {
@@ -370,7 +382,7 @@ impl BlockCipher for AES {
     /// Encrypt a block of data. The length of the block should always be the blocksize.
     /// if not, this will crash (since in that case it tries to acsess elements of the vector that
     /// is out of bounds).
-    fn encrypt_block(&self, block: Vec<u8>) -> Vec<u8> {
+    fn encrypt_block(&self, block: &mut [u8]) {
         let mut input = Block::from(block);
 
         input.transpose().add_round_key(&self.w[0..16]);
@@ -383,19 +395,17 @@ impl BlockCipher for AES {
                 .add_round_key(&self.w[(round * 16)..((round + 1) * 16)]);
         }
 
-        Vec::from(
-            input
-                .sub_bytes(false)
-                .shift_rows(false)
-                .add_round_key(&self.w[(self.nr * 16)..((self.nr + 1) * 16)])
-                .transpose(),
-        )
+        input
+            .sub_bytes(false)
+            .shift_rows(false)
+            .add_round_key(&self.w[(self.nr * 16)..((self.nr + 1) * 16)])
+            .transpose();
     }
 
     /// Decrypt a block of data.
     /// The block has to be the blocksize.
     /// If it is larger, the rest is ignored. If it is shorter, it will crash.
-    fn decrypt_block(&self, block: Vec<u8>) -> Vec<u8> {
+    fn decrypt_block(&self, block: &mut [u8]) {
         let mut input = Block::from(block);
 
         input
@@ -410,13 +420,11 @@ impl BlockCipher for AES {
                 .mix_columns(true);
         }
 
-        Vec::from(
-            input
-                .shift_rows(true)
-                .sub_bytes(true)
-                .add_round_key(&self.w[0..16])
-                .transpose(),
-        )
+        input
+            .shift_rows(true)
+            .sub_bytes(true)
+            .add_round_key(&self.w[0..16])
+            .transpose();
     }
 
     fn block_size(&self) -> usize {
@@ -428,7 +436,7 @@ impl BlockCipher for AES {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypt::Crypt;
+    use crate::crypt::BlockCipher;
 
     #[test]
     fn test_multiplication() {
@@ -471,10 +479,17 @@ mod tests {
 
         let content = b"hello motherfuck";
 
-        let c = aes.encrypt_block(content.to_vec());
-        println!("{:?}", c.to_vec());
-        let d = aes.decrypt_block(c);
-        println!("{:?}", d.to_vec());
+        let mut c = content.clone();
+
+        aes.encrypt_block(&mut c[..]);
+
+        println!("{:?}", c);
+
+        let mut d = c.clone();
+
+        aes.decrypt_block(&mut d[..]);
+
+        println!("{:?}", d);
         assert_eq!(d.to_vec(), content, "decryption faliure");
     }
 
@@ -489,18 +504,20 @@ mod tests {
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,
         ];
-
-        let aes = AES::new(AESKey::AES256(key));
-        let c = aes.encrypt_block(plaintext.to_vec());
-        println!("{:?}", c.to_vec());
         let output = [
             0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf, 0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49,
             0x60, 0x89,
         ];
-        assert_eq!(c.to_vec(), output, "encryption faliure");
-        let d = aes.decrypt_block(c);
-        println!("{:?}", d.to_vec());
-        assert_eq!(d.to_vec(), plaintext, "decryption faliure");
+        let mut ciphertext = plaintext.clone();
+
+        let aes = AES::new(AESKey::AES256(key));
+        aes.encrypt_block(&mut ciphertext);
+        println!("{:?}", ciphertext);
+        assert_eq!(ciphertext, output, "encryption faliure");
+        let mut decrypted = ciphertext.clone();
+        aes.decrypt_block(&mut decrypted);
+        println!("{:?}", decrypted);
+        assert_eq!(decrypted, plaintext, "decryption faliure");
     }
 
     #[test]
@@ -513,18 +530,20 @@ mod tests {
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f,
         ];
-
-        let aes = AES::new(AESKey::AES128(key));
-        let c = aes.encrypt_block(plaintext.to_vec());
-        println!("{:?}", c.to_vec());
         let output = [
             0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4,
             0xc5, 0x5a,
         ];
-        assert_eq!(c.to_vec(), output, "encryption faliure");
-        let d = aes.decrypt_block(c);
-        println!("{:?}", d.to_vec());
-        assert_eq!(d.to_vec(), plaintext, "decryption faliure");
+
+        let aes = AES::new(AESKey::AES128(key));
+        let mut ciphertext = plaintext.clone();
+        aes.encrypt_block(&mut ciphertext);
+        println!("{:?}", ciphertext);
+        assert_eq!(ciphertext, output, "encryption faliure");
+        let mut decrypted = ciphertext.clone();
+        aes.decrypt_block(&mut decrypted);
+        println!("{:?}", decrypted);
+        assert_eq!(decrypted, plaintext, "decryption faliure");
     }
 
     #[test]
@@ -537,60 +556,62 @@ mod tests {
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
         ];
-
-        let aes = AES::new(AESKey::AES192(key));
-        let c = aes.encrypt_block(plaintext.to_vec());
-        println!("{:?}", c.to_vec());
         let output = [
             0xdd, 0xa9, 0x7c, 0xa4, 0x86, 0x4c, 0xdf, 0xe0, 0x6e, 0xaf, 0x70, 0xa0, 0xec, 0x0d,
             0x71, 0x91,
         ];
-        assert_eq!(c.to_vec(), output, "encryption faliure");
-        let d = aes.decrypt_block(c);
-        println!("{:?}", d.to_vec());
-        assert_eq!(d.to_vec(), plaintext, "decryption faliure");
+
+        let aes = AES::new(AESKey::AES192(key));
+        let mut ciphertext = plaintext.clone();
+        aes.encrypt_block(&mut ciphertext);
+        println!("{:?}", ciphertext);
+        assert_eq!(ciphertext, output, "encryption faliure");
+        let mut decrypted = ciphertext.clone();
+        aes.decrypt_block(&mut decrypted);
+        println!("{:?}", decrypted);
+        assert_eq!(decrypted, plaintext, "decryption faliure");
     }
 
-    #[test]
-    fn stream_test_iterator() {
-        let iv: Vec<u8> = (0..16).collect();
+    //     #[test]
+    //     fn stream_test_iterator() {
+    //         let iv: Vec<u8> = (0..16).collect();
 
-        let plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+    //         let plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
 
-        Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
+    //         Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
 
-        Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
+    //         Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
 
-        In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
-        assert!(plaintext.len() & 15 != 0);
+    //         In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
+    //         assert!(plaintext.len() & 15 != 0);
 
-        let mut plaintext = b"balle".to_vec();
-        while plaintext.len() < 16 {
-            plaintext.push(0);
-        }
+    //         let mut plaintext = b"balle".to_vec();
+    //         while plaintext.len() < 16 {
+    //             plaintext.push(0);
+    //         }
 
-        let key = [
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
-            0x1c, 0x1d, 0x1e, 0x1f,
-        ];
+    //         let key = [
+    //             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+    //             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+    //             0x1c, 0x1d, 0x1e, 0x1f,
+    //         ];
 
-        let aes = AES::new(AESKey::AES256(key));
-        println!("{:?}", plaintext.len());
-        let c: Vec<u8> = plaintext
-            .clone()
-            .into_iter()
-            .encrypt(&aes, iv.clone())
-            .collect();
-        println!("{:?}, {}", c, c.len());
-        let d: Vec<u8> = c.clone().into_iter().decrypt(&aes, iv).collect();
-        println!("{:?}", d);
-        assert_ne!(c, d);
-        assert_eq!(d, plaintext, "decryption faliure");
-        assert_eq!(c.len(), plaintext.len());
+    //         let aes = AES::new(AESKey::AES256(key));
+    //         println!("{:?}", plaintext.len());
+    //         let c: Vec<u8> = plaintext
+    //             .clone()
+    //             .into_iter()
+    //             .encrypt(&aes, iv.clone())
+    //             .collect();
+    //         println!("{:?}, {}", c, c.len());
+    //         let d: Vec<u8> = c.clone().into_iter().decrypt(&aes, iv).collect();
+    //         println!("{:?}", d);
+    //         assert_ne!(c, d);
+    //         assert_eq!(d, plaintext, "decryption faliure");
+    //         assert_eq!(c.len(), plaintext.len());
 
-        println!("{}", plaintext.len());
-    }
+    //         println!("{}", plaintext.len());
+    //     }
 
     #[test]
     fn cbc_test() {
@@ -620,8 +641,12 @@ mod tests {
 
         let aes = AES::new(AESKey::AES256(key));
 
-        let encrypted: Vec<u8> = plaintext.to_vec().into_iter().encrypt(&aes, iv).collect();
+        let mut encrypted = plaintext.to_vec().clone();
+        BlockCipher::cbc_encrypt(&aes, &iv, &mut encrypted).unwrap();
+        // aes.cbc_encrypt(&iv, &mut encrypted);
 
-        assert_eq!(encrypted[..], ciphertext[..]);
+        // let encrypted: Vec<u8> = plaintext.to_vec().into_iter().encrypt(&aes, iv).collect();
+
+        assert_eq!(encrypted[0..ciphertext.len()], ciphertext[..]);
     }
 }
