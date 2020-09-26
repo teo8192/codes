@@ -1,15 +1,12 @@
-use crate::crypt::sha::Hash;
+use super::mac::hmac;
 
 fn round(password: &Vec<u8>, salt: &Vec<u8>, count: usize, i: usize) -> Box<[u8; 32]> {
     let mut result = Box::new([0u8; 32]);
-    let mut tmp_0: Box<[u8; 32]> = password
-        .iter()
-        .chain(salt.iter())
-        .chain(format!("{}", i).into_bytes().iter())
-        .map(|x| *x)
-        .hash();
+    let mut k = salt.clone();
+    k.append(&mut format!("{}", i).into_bytes());
+    let mut tmp_0 = hmac(password, &k, 32);
     for _ in 1..count {
-        let tmp: Box<[u8; 32]> = password.iter().chain(tmp_0.iter()).map(|x| *x).hash();
+        let tmp = hmac(password, &tmp_0, 32);
         for (i, b) in tmp.iter().enumerate() {
             result[i] ^= b;
         }
