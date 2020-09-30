@@ -1,3 +1,15 @@
+//! Currently SHA512 implemented by [FIPS 180-4](https://csrc.nist.gov/publications/detail/fips/180/4/final) standard.
+//!
+//! The implementation is a bit wierd, you have to encrypt an iterator of bytes.
+//! here is an example:
+//!
+//!     # use codes::crypt::sha::*;
+//!     let digest: Box<[u8; 64]> = b"Lorem ipsum dolor sit amet.".iter().map(|x|*x).hash();
+//!
+//! Since the hash works on iterators, it has to be tyrned into an iterator.
+//! Since it is an iterator on a `str`, the elements are `&u8` and havbe to be dereferenced.
+//! It may then be hashed.
+
 // {{{ Macros for computation
 
 macro_rules! sum {
@@ -191,6 +203,19 @@ macro_rules! hash512alg {
                 $size
             }
         }
+
+        impl Hash<[u8; $size >> 3]> for [u8] {
+            fn hash(&mut self) -> Box<[u8; $size >> 3]> {
+                let mut iv = $iv;
+
+                sha512_base(&mut self.iter().map(|x| *x), &mut iv);
+
+                create_box!(iv, $size, u64)
+            }
+            fn size() -> usize {
+                $size
+            }
+        }
     };
 }
 
@@ -327,13 +352,6 @@ fn sha512_base<I: Iterator<Item = u8>>(input: &mut I, iv: &mut [u64; 8]) {
             c = b;
             b = a;
             a = sum!(t_1, t_2);
-
-            //             if t == 79 {
-            //                 println!("A/E: {:016X} {:016X}", a, e);
-            //                 println!("B/F: {:016X} {:016X}", b, f);
-            //                 println!("C/G: {:016X} {:016X}", c, g);
-            //                 println!("D/H: {:016X} {:016X}", d, h);
-            //             }
         }
 
         iv[0] = sum!(a, iv[0]);
@@ -344,10 +362,6 @@ fn sha512_base<I: Iterator<Item = u8>>(input: &mut I, iv: &mut [u64; 8]) {
         iv[5] = sum!(f, iv[5]);
         iv[6] = sum!(g, iv[6]);
         iv[7] = sum!(h, iv[7]);
-
-        // for i in iv.iter() {
-        //     println!("{:016X}", i);
-        // }
     }
 }
 
@@ -471,7 +485,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0x42, 0xE2, 0x0E, 0x37, 0xED, 0x26, 0x5C, 0xEE, 0xE9, 0xA4, 0x3E, 0x89, 0x24, 0xAA,
         ];
 
-        let output: Box<[u8; 28]> = b"abc".iter().map(|x| *x).hash();
+        let output: Box<[u8; 28]> = b"abc".iter().map(|x|*x).hash();
 
         assert_eq!(result[..], output[..]);
     }
@@ -483,7 +497,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
             0x45, 0x33, 0x35, 0xD6, 0x64, 0x73, 0x4F, 0xE4, 0x0E, 0x72, 0x68, 0x67, 0x4A, 0xF9,
         ];
 
-        let output: Box<[u8; 28]> = (0x61..0x6f).flat_map(|i| i..(i + 8)).hash();
+        let output: Box<[u8; 28]> = (0x61..0x6fu8).flat_map(|i| i..(i + 8)).hash();
 
         assert_eq!(result[..], output[..]);
     }
