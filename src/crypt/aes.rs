@@ -599,10 +599,10 @@ mod tests {
         let aes = AES::new(AESKey::AES256(key));
         println!("{:?}", plaintext.len());
         let mut ciphertext = plaintext.clone();
-        aes.cbc_encrypt(&iv, &mut ciphertext).unwrap();
+        aes.encrypt(&iv, &mut ciphertext).unwrap();
         println!("{:?}, {}", ciphertext, ciphertext.len());
         let mut decrypted = ciphertext.clone();
-        aes.cbc_decrypt(&iv, &mut decrypted).unwrap();
+        aes.decrypt(&iv, &mut decrypted).unwrap();
         println!("{:?}, {}", decrypted, decrypted.len());
         assert_ne!(ciphertext, decrypted);
         assert_eq!(decrypted, plaintext, "decryption faliure");
@@ -641,7 +641,7 @@ mod tests {
 
         let mut encrypted = plaintext.to_vec().clone();
 
-        aes.cbc_encrypt(&iv, &mut encrypted).unwrap();
+        aes.encrypt(&iv, &mut encrypted).unwrap();
 
         println!("{} {}", encrypted.len(), ciphertext.len());
 

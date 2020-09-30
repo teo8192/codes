@@ -57,7 +57,7 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
 
     let data = match args.mode {
         Mode::Encrypt => {
-            aes.cbc_encrypt(&iv, &mut bytes).unwrap();
+            aes.encrypt(&iv, &mut bytes).unwrap();
             bytes.into_iter().encode().collect()
         }
         Mode::Decrypt => {
@@ -65,7 +65,7 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
             while bytes.len() & 15 != 0 {
                 bytes.pop();
             }
-            aes.cbc_decrypt(&iv, &mut bytes).unwrap();
+            aes.decrypt(&iv, &mut bytes).unwrap();
             bytes
         }
     };
