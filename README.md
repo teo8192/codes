@@ -16,7 +16,7 @@ It is a small application to encrypt, decrypt and apply error correcting codes.
 Run with
 
 ```bash
-cargo run --example cryptor --release -- -i [inputfile] -o [outputfile] -p [password] [encrypt|decrypt] [-h]
+cargo run --example cryptor --release -- [-h] [-i inputfile] [-o outputfile] [-p password] encrypt|decrypt
 ```
 
 # Stuff to implement
