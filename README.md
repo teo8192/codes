@@ -8,6 +8,12 @@ Here is some of the resources used:
  - AES, [NIST FIPS 197](https://csrc.nist.gov/publications/detail/fips/197/final)
  - Secure Hashing Algorithm (SHA) [NIST FIPS 180-4](https://csrc.nist.gov/publications/detail/fips/180/4/final)
  - PBKDF2: [RFC8018](https://tools.ietf.org/html/rfc8018)
+ 
+Generate the documentation with
+
+```bash
+cargo doc
+```
 
 # Examples
 
