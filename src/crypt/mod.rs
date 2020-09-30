@@ -1,17 +1,19 @@
-/// The Advanced Encryption Standard, according to NIST FIPS 197
+/// The Advanced Encryption Standard, according to [NIST FIPS 197](https://csrc.nist.gov/publications/detail/fips/197/final)
 pub mod aes;
 pub use aes::{AESKey, AES};
 
 /// Naive textbook implementation of RSA.
 pub mod rsa;
 
-/// Currently SHA512 implemented by FIPS 180-4 standard.
+/// Currently SHA512 implemented by [FIPS 180-4](https://csrc.nist.gov/publications/detail/fips/180/4/final) standard.
 pub mod sha;
 
-pub mod pbkdf2;
-
+/// Message authentication codes.
+/// The keyed-hash MAC (HMAC) is implemented by [NIST FIPS 198-1](https://csrc.nist.gov/publications/detail/fips/198/1/final)
 pub mod mac;
 
+/// The encryption mode.
+/// Should add more modes from [NIST SP 800 38A](https://csrc.nist.gov/publications/detail/sp/800-38a/final)
 pub enum EncryptionMode {
     CBC,
 }
@@ -132,7 +134,7 @@ fn cbc_decrypt<B: BlockCipher>(
     Ok(())
 }
 
-/// Any block cipher implementingthis trait may be used with the implementation of CBC with CTS.
+/// Any block cipher implementingthis trait may be used with the implementation of CBC.
 pub trait BlockCipher {
     fn encrypt_block(&self, block: &mut [u8]);
     fn decrypt_block(&self, block: &mut [u8]);
@@ -164,4 +166,47 @@ pub trait BlockCipher {
             CBC => cbc_decrypt(self, iv, ciphertext),
         }
     }
+}
+
+fn pbkdf2_round(password: &Vec<u8>, salt: &Vec<u8>, count: usize, i: usize) -> Box<[u8; 32]> {
+    let mut result = Box::new([0u8; 32]);
+    let mut k = salt.clone();
+    k.append(&mut format!("{}", i).into_bytes());
+    let mut tmp_0 = mac::hmac(password, &k, 32);
+    for _ in 1..count {
+        let tmp = mac::hmac(password, &tmp_0, 32);
+        for (i, b) in tmp.iter().enumerate() {
+            result[i] ^= b;
+        }
+        tmp_0 = tmp;
+    }
+    result
+}
+
+/// password based key derivation funcrion v. 2.1
+/// Implemented by [RFC8018](https://tools.ietf.org/html/rfc8018)
+/// Applies a pseudo-random function a lot of times to the password and salt to generate a key.
+///
+///  - password is the password
+///  - salt is a salt
+///  - dklen is the derived key length
+///  - c is the iteration count
+///  - hash is the hash funciton
+///  - hlen is the bit length of the hash function
+pub fn pbkdf2(password: Vec<u8>, salt: Vec<u8>, c: usize, dklen: usize) -> Vec<u8> {
+    debug_assert!(dklen <= ((1 << 32) - 1) * 256, "derived key too long");
+    let l = dklen / 256 + if dklen % 256 != 0 { 1 } else { 0 };
+    let mut res = Vec::new();
+    let mut counter = 0;
+    'outer: for block in (0..l).map(|i| pbkdf2_round(&password, &salt, c, i)) {
+        for b in block.iter() {
+            if counter * 8 >= dklen {
+                break 'outer;
+            }
+            res.push(*b);
+            counter += 1;
+        }
+    }
+
+    res
 }

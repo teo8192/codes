@@ -1,4 +1,4 @@
-use codes::crypt::pbkdf2::pbkdf2;
+use codes::crypt::pbkdf2;
 use codes::crypt::{AESKey, BlockCipher, AES};
 use codes::error::hamming::ErrorDetection;
 use std::fs::File;
