@@ -12,7 +12,7 @@ Here is some of the resources used:
 Generate the documentation with
 
 ```bash
-cargo doc
+cargo doc --no-deps --open
 ```
 
 # Examples
