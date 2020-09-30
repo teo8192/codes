@@ -17,7 +17,7 @@ Here is some of the resources used:
  - [ ] CMAC
  - [ ] Elliptic curves
  - [ ] Message padding like SHA512 for CBC
- - [ ] CBC in place on mutable vector
+ - [x] CBC in place on mutable vector
  - [ ] Digital signatures?
  - [ ] Fix input vectors and salts
 

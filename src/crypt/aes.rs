@@ -572,46 +572,44 @@ mod tests {
         assert_eq!(decrypted, plaintext, "decryption faliure");
     }
 
-    //     #[test]
-    //     fn stream_test_iterator() {
-    //         let iv: Vec<u8> = (0..16).collect();
+    #[test]
+    fn stream_test_iterator() {
+        let iv: Vec<u8> = (0..16).collect();
 
-    //         let plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+        let plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
 
-    //         Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
+            Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
 
-    //         Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
+            Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
 
-    //         In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
-    //         assert!(plaintext.len() & 15 != 0);
+            In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
+        assert!(plaintext.len() & 15 != 0);
 
-    //         let mut plaintext = b"balle".to_vec();
-    //         while plaintext.len() < 16 {
-    //             plaintext.push(0);
-    //         }
+        // let mut plaintext = b"balle".to_vec();
+        // while plaintext.len() < 64 {
+        //     plaintext.push(0);
+        // }
 
-    //         let key = [
-    //             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-    //             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
-    //             0x1c, 0x1d, 0x1e, 0x1f,
-    //         ];
+        let key = [
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+            0x1c, 0x1d, 0x1e, 0x1f,
+        ];
 
-    //         let aes = AES::new(AESKey::AES256(key));
-    //         println!("{:?}", plaintext.len());
-    //         let c: Vec<u8> = plaintext
-    //             .clone()
-    //             .into_iter()
-    //             .encrypt(&aes, iv.clone())
-    //             .collect();
-    //         println!("{:?}, {}", c, c.len());
-    //         let d: Vec<u8> = c.clone().into_iter().decrypt(&aes, iv).collect();
-    //         println!("{:?}", d);
-    //         assert_ne!(c, d);
-    //         assert_eq!(d, plaintext, "decryption faliure");
-    //         assert_eq!(c.len(), plaintext.len());
+        let aes = AES::new(AESKey::AES256(key));
+        println!("{:?}", plaintext.len());
+        let mut ciphertext = plaintext.clone();
+        aes.cbc_encrypt(&iv, &mut ciphertext).unwrap();
+        println!("{:?}, {}", ciphertext, ciphertext.len());
+        let mut decrypted = ciphertext.clone();
+        aes.cbc_decrypt(&iv, &mut decrypted).unwrap();
+        println!("{:?}, {}", decrypted, decrypted.len());
+        assert_ne!(ciphertext, decrypted);
+        assert_eq!(decrypted, plaintext, "decryption faliure");
+        assert_eq!(decrypted.len(), plaintext.len());
 
-    //         println!("{}", plaintext.len());
-    //     }
+        println!("{}", plaintext.len());
+    }
 
     #[test]
     fn cbc_test() {
@@ -642,10 +640,10 @@ mod tests {
         let aes = AES::new(AESKey::AES256(key));
 
         let mut encrypted = plaintext.to_vec().clone();
-        BlockCipher::cbc_encrypt(&aes, &iv, &mut encrypted).unwrap();
-        // aes.cbc_encrypt(&iv, &mut encrypted);
 
-        // let encrypted: Vec<u8> = plaintext.to_vec().into_iter().encrypt(&aes, iv).collect();
+        aes.cbc_encrypt(&iv, &mut encrypted).unwrap();
+
+        println!("{} {}", encrypted.len(), ciphertext.len());
 
         assert_eq!(encrypted[0..ciphertext.len()], ciphertext[..]);
     }
