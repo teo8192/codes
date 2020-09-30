@@ -31,10 +31,10 @@ cargo run --example cryptor --release -- [-h] [-i inputfile] [-o outputfile] [-p
  - [ ] SHA3
  - [ ] CMAC
  - [ ] Elliptic curves
- - [ ] Message padding like SHA512 for CBC
- - [x] CBC in place on mutable vector
  - [ ] Digital signatures?
  - [ ] Fix input vectors and salts
+ - [x] Message padding like SHA512 for CBC
+ - [x] CBC in place on mutable vector
 
 # Future problems that require future solutions
 
