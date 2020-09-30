@@ -9,6 +9,15 @@ Here is some of the resources used:
  - Secure Hashing Algorithm (SHA) [NIST FIPS 180-4](https://csrc.nist.gov/publications/detail/fips/180/4/final)
  - PBKDF2: [RFC8018](https://tools.ietf.org/html/rfc8018)
 
+# Examples
+
+In the examples diecroy there are a example.
+It is a small application to encrypt, decrypt and apply error correcting codes.
+Run with
+
+```bash
+cargo run --example cryptor --release -- -i [inputfile] -o [outputfile] -p [password] [encrypt|decrypt] [-h]
+```
 
 # Stuff to implement
 
