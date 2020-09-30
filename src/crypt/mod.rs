@@ -18,22 +18,22 @@ pub enum EncryptionMode {
 
 fn pad(bytes: &mut Vec<u8>, bs: usize) {
     let len: u32 = bytes.len() as u32;
-    let end_bytes = 32 >> 3;
-    let zeros = bs - ((end_bytes + len as usize + 1) % bs);
+    let end_bytes: u32 = 32 >> 3;
+    let zeros = bs - ((end_bytes + len + 1) as usize % bs);
+
+    // The leading one
+    let one = [1u8].iter();
+
+    // the number at the end
+    let end_num = (zeros as u32 + end_bytes + 1).to_le_bytes();
+
+    // Has to be repeated reference to 0 since the other iterators operate on &u8
+    let zeros = std::iter::repeat(&0u8).take(zeros);
+
     // append a one, a lot of zeros and then the number of padded bytes
     // ends up something like this:
     // 1 0 0 0 0 0 0 0 0 0 0 12
-    bytes.append(
-        &mut [1u8]
-            .iter()
-            .chain(
-                std::iter::repeat(&0u8)
-                    .take(zeros)
-                    .chain(((zeros + end_bytes + 1) as u32).to_le_bytes().iter()),
-            )
-            .map(|x| *x)
-            .collect(),
-    );
+    bytes.append(&mut one.chain(zeros).chain(end_num.iter()).map(|x| *x).collect());
 }
 
 fn strip_padding(bytes: &mut Vec<u8>) {
@@ -44,17 +44,15 @@ fn strip_padding(bytes: &mut Vec<u8>) {
         end[i] = bytes[i + offset];
     }
 
-    let end = u32::from_le_bytes(end);
-    let length = bytes.len();
-    let end_range = || (length - end as usize)..length;
+    // Get the number at the end
+    let end = u32::from_le_bytes(end) as usize;
 
-    for i in &mut bytes[end_range()] {
-        *i = 0;
-    }
-
-    bytes.drain(end_range());
+    // Drain the padding from the vector
+    bytes.drain((bytes.len() - end)..bytes.len());
 }
 
+/// Encrypt bytes in CBC mode.
+/// It will always add padding.
 fn cbc_encrypt<B: BlockCipher>(
     cipher: &B,
     iv: &Vec<u8>,
@@ -86,6 +84,7 @@ fn cbc_encrypt<B: BlockCipher>(
     Ok(())
 }
 
+/// Decrypt bytes that was encrypted in CBC mode
 fn cbc_decrypt<B: BlockCipher>(
     cipher: &B,
     iv: &Vec<u8>,
@@ -107,21 +106,24 @@ fn cbc_decrypt<B: BlockCipher>(
     }
 
     let bs = cipher.block_size();
-    let mut prev_block = Vec::new();
-    for i in iv {
-        prev_block.push(*i);
-    }
+    let mut prev_block = iv.clone();
 
     for i in 0..(ciphertext.len() / bs) {
-        let curb = &ciphertext[(i * bs)..((i + 1) * bs)];
+        let current_block = &mut ciphertext[(i * bs)..((i + 1) * bs)];
+
+        // save the current ciphertext to remove
+        // the chaining of the next block
         let pb = prev_block.clone();
         for i in 0..bs {
-            prev_block[i] = curb[i];
+            prev_block[i] = current_block[i];
         }
 
-        cipher.decrypt_block(&mut ciphertext[(i * bs)..((i + 1) * bs)]);
+        // decrypt current block
+        cipher.decrypt_block(current_block);
+
+        // Reverse the chaining
         for j in 0..cipher.block_size() {
-            ciphertext[(i * bs) + j] ^= pb[j];
+            current_block[j] ^= pb[j];
         }
     }
 
