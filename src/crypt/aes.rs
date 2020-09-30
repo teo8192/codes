@@ -1,3 +1,33 @@
+//! The Advanced Encryption Standard, according to [NIST FIPS 197](https://csrc.nist.gov/publications/detail/fips/197/final)
+//!
+//! An example usage:
+//!
+//!     # use codes::crypt::{aes::{AES, AESKey}, BlockCipher, pbkdf2};
+//!     # let secret_password = b"top secret lol".to_vec();
+//!     # let salt = (0..23).collect();
+//!     # let iteration_count = 10000;
+//!     # let iv = (0..16u8).collect();
+//!     let plaintext = b"Lorem ipsum dolor sit amet.".to_vec();
+//!     let mut message = plaintext.clone();
+//!
+//!     // Look up in some NIST publication or RFC for salt generation.
+//!     let key_vec = pbkdf2(secret_password, salt, iteration_count, 256);
+//!
+//!     // Just move the key into an array, lots of ways to do this.
+//!     let mut key = [0u8; 32];
+//!     for (i, b) in key.iter_mut().enumerate() { *b = key_vec[i]; }
+//!
+//!     let aes = AES::new(AESKey::AES256(key));
+//!
+//!     // You need to select an unpredictable input vector for every encryption
+//!     aes.encrypt(&iv, &mut message);
+//!
+//!     assert_ne!(plaintext, message);
+//!
+//!     aes.decrypt(&iv, &mut message);
+//!
+//!     assert_eq!(plaintext, message);
+
 use crate::crypt::BlockCipher;
 
 // {{{ constant substitution boxes.
@@ -584,11 +614,6 @@ mod tests {
 
             In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
         assert!(plaintext.len() & 15 != 0);
-
-        // let mut plaintext = b"balle".to_vec();
-        // while plaintext.len() < 64 {
-        //     plaintext.push(0);
-        // }
 
         let key = [
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
