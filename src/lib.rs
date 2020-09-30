@@ -1,4 +1,4 @@
-//! This is a test library for me to exprerement
+//! This is a test library for me to experement
 //! both with Rust and with information theory.
 //! The goal is to implement error detecting codes,
 //! encryption and possibly compression.
