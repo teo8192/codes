@@ -1,11 +1,9 @@
-/// The Advanced Encryption Standard, according to [NIST FIPS 197](https://csrc.nist.gov/publications/detail/fips/197/final)
 pub mod aes;
 pub use aes::{AESKey, AES};
 
 /// Naive textbook implementation of RSA.
 pub mod rsa;
 
-/// Currently SHA512 implemented by [FIPS 180-4](https://csrc.nist.gov/publications/detail/fips/180/4/final) standard.
 pub mod sha;
 
 /// Message authentication codes.
@@ -191,8 +189,6 @@ fn pbkdf2_round(password: &Vec<u8>, salt: &Vec<u8>, count: usize, i: usize) -> B
 ///  - salt is a salt
 ///  - dklen is the derived key length
 ///  - c is the iteration count
-///  - hash is the hash funciton
-///  - hlen is the bit length of the hash function
 pub fn pbkdf2(password: Vec<u8>, salt: Vec<u8>, c: usize, dklen: usize) -> Vec<u8> {
     debug_assert!(dklen <= ((1 << 32) - 1) * 256, "derived key too long");
     let l = dklen / 256 + if dklen % 256 != 0 { 1 } else { 0 };

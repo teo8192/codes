@@ -4,6 +4,8 @@
 //! encryption and possibly compression.
 //! Might also look at more shit on the way.
 
+/// The cryptography module.
+///
 /// An implementation of AES block encryption, and cipher block chaining.
 ///
 /// RSA is implemented, including key generation.
