@@ -1,6 +1,8 @@
 pub mod aes;
 pub use aes::{AESKey, AES};
 
+pub mod twofish;
+
 /// Naive textbook implementation of RSA.
 pub mod rsa;
 
