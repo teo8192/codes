@@ -24,7 +24,7 @@ fn pad(bytes: &mut Vec<u8>, bs: usize) {
     let zeros = bs - ((end_bytes + len + 1) as usize % bs);
 
     // The leading one
-    let one = [1u8].iter();
+    let one = [1u8 << 7].iter();
 
     // the number at the end
     let end_num = (zeros as u32 + end_bytes + 1).to_le_bytes();
