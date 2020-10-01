@@ -237,7 +237,7 @@ fn pbkdf2_round(password: &Vec<u8>, salt: &Vec<u8>, count: usize, i: usize) -> B
 ///
 ///  - password is the password
 ///  - salt is a salt
-///  - dklen is the derived key length
+///  - dklen is the derived key length in bits
 ///  - c is the iteration count
 pub fn pbkdf2(password: Vec<u8>, salt: Vec<u8>, c: usize, dklen: usize) -> Vec<u8> {
     debug_assert!(dklen <= ((1 << 32) - 1) * 256, "derived key too long");
