@@ -8,6 +8,7 @@ Here is some of the resources used:
  - AES, [NIST FIPS 197](https://csrc.nist.gov/publications/detail/fips/197/final)
  - Secure Hashing Algorithm (SHA) [NIST FIPS 180-4](https://csrc.nist.gov/publications/detail/fips/180/4/final)
  - PBKDF2: [RFC8018](https://tools.ietf.org/html/rfc8018)
+ - [Twofish](https://www.schneier.com/academic/archives/1998/06/twofish_a_128-bit_bl.html)
  
 Generate the documentation with
 
@@ -27,14 +28,13 @@ cargo run --example cryptor --release -- [-h] [-i inputfile] [-o outputfile] [-p
 
 # Stuff to implement
 
- - [ ] [Twofish](https://www.schneier.com/academic/archives/1998/06/twofish_a_128-bit_bl.html) decryption
  - [ ] SHA256 fam
  - [ ] SHA3
  - [ ] CMAC
  - [ ] Elliptic curves
  - [ ] Digital signatures?
  - [ ] Fix input vectors and salts
- - [x] Twofish encryption
+ - [x] Twofish
  - [x] Message padding like SHA512 for CBC
  - [x] CBC in place on mutable vector
 
