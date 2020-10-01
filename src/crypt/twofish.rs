@@ -66,7 +66,17 @@ impl Twofish {
         }
 
         for r in 0..16 {
-            self.round(input, r);
+            let (f0, f1) = self.f(input[0], input[1], r);
+
+            let r0 = (input[2] ^ f0).rotate_right(1);
+            let r1 = input[3].rotate_left(1) ^ f1;
+            let r2 = input[0];
+            let r3 = input[1];
+
+            input[0] = r0;
+            input[1] = r1;
+            input[2] = r2;
+            input[3] = r3;
         }
 
         let mut c = [0u32; 4];
@@ -77,6 +87,26 @@ impl Twofish {
 
         for (n, b) in input.iter_mut().enumerate() {
             *b = c[n];
+        }
+    }
+
+    fn decrypt(&self, input: &mut [u32; 4]) {
+        let mut c = [0u32; 4];
+
+        for i in 0..4 {
+            c[i] = input[(i + 2) & 3] ^ self.k[i + 4];
+        }
+
+        for (n, b) in input.iter_mut().enumerate() {
+            *b = c[n];
+        }
+
+        for r in (0..16).rev() {
+            self.round(input, r);
+        }
+
+        for (n, b) in input.iter_mut().enumerate() {
+            *b ^= self.k[n];
         }
     }
 }
@@ -144,10 +174,8 @@ fn multiply_bytes(a: u8, b: u8, modulus: u16) -> u8 {
 }
 
 const RS: [u8; 32] = [
-    0x01, 0xA4, 0x55, 0x87, 0x5A, 0x58, 0xDB, 0x9E,
-    0xA4, 0x56, 0x82, 0xF3, 0x1E, 0xC6, 0x68, 0xE5,
-    0x02, 0xA1, 0xFC, 0xC1, 0x47, 0xAE, 0x3D, 0x19,
-    0xA4, 0x55, 0x87, 0x5A, 0x58, 0xDB, 0x9E, 0x03,
+    0x01, 0xA4, 0x55, 0x87, 0x5A, 0x58, 0xDB, 0x9E, 0xA4, 0x56, 0x82, 0xF3, 0x1E, 0xC6, 0x68, 0xE5,
+    0x02, 0xA1, 0xFC, 0xC1, 0x47, 0xAE, 0x3D, 0x19, 0xA4, 0x55, 0x87, 0x5A, 0x58, 0xDB, 0x9E, 0x03,
 ];
 
 fn mulrs(input: [u8; 8]) -> u32 {
@@ -324,32 +352,19 @@ mod tests {
         let twofish = Twofish::new(&key[..]);
 
         let expected_key: [u32; 40] = [
-            0x52C54DDE, 0x11F0626D, 
-            0x7CAC9D4A, 0x4D1B4AAA, 
-            0xB7B83A10, 0x1E7D0BEB, 
-            0xEE9C341F, 0xCFE14BE4, 
-            0xF98FFEF9, 0x9C5B3C17, 
-            0x15A48310, 0x342A4D81, 
-            0x424D89FE, 0xC14724A7, 
-            0x311B834C, 0xFDE87320, 
-            0x3302778F, 0x26CD67B4, 
-            0x7A6C6362, 0xC2BAF60E, 
-            0x3411B994, 0xD972C87F, 
-            0x84ADB1EA, 0xA7DEE434, 
-            0x54D2960F, 0xA2F7CAA8, 
-            0xA6B8FF8C, 0x8014C425, 
-            0x6A748D1C, 0xEDBAF720, 
-            0x928EF78C, 0x0338EE13, 
-            0x9949D6BE, 0xC8314176, 
-            0x07C07D68, 0xECAE7EA7, 
-            0x1FE71844, 0x85C05C89, 
-            0xF298311E, 0x696EA672, 
+            0x52C54DDE, 0x11F0626D, 0x7CAC9D4A, 0x4D1B4AAA, 0xB7B83A10, 0x1E7D0BEB, 0xEE9C341F,
+            0xCFE14BE4, 0xF98FFEF9, 0x9C5B3C17, 0x15A48310, 0x342A4D81, 0x424D89FE, 0xC14724A7,
+            0x311B834C, 0xFDE87320, 0x3302778F, 0x26CD67B4, 0x7A6C6362, 0xC2BAF60E, 0x3411B994,
+            0xD972C87F, 0x84ADB1EA, 0xA7DEE434, 0x54D2960F, 0xA2F7CAA8, 0xA6B8FF8C, 0x8014C425,
+            0x6A748D1C, 0xEDBAF720, 0x928EF78C, 0x0338EE13, 0x9949D6BE, 0xC8314176, 0x07C07D68,
+            0xECAE7EA7, 0x1FE71844, 0x85C05C89, 0xF298311E, 0x696EA672,
         ];
 
         assert_eq!(twofish.k[..], expected_key[..]);
 
         let exprected_encrypted: [u8; 16] = [
-            0x9F, 0x58, 0x9F, 0x5C, 0xF6, 0x12, 0x2C, 0x32, 0xB6, 0xBF, 0xEC, 0x2F, 0x2A, 0xE8, 0xC3, 0x5A
+            0x9F, 0x58, 0x9F, 0x5C, 0xF6, 0x12, 0x2C, 0x32, 0xB6, 0xBF, 0xEC, 0x2F, 0x2A, 0xE8,
+            0xC3, 0x5A,
         ];
 
         let mut ciphertext = convert_to_block(Box::new([0u8; 16]));
@@ -360,6 +375,15 @@ mod tests {
 
         assert_eq!(&ciphertext[..], &exprected_encrypted[..]);
 
+        let mut decrypted = convert_to_block(ciphertext);
+
+        twofish.decrypt(&mut decrypted);
+
+        let decrypted = convert_from_block(decrypted);
+
+        let exprected_decrypted = [0u8; 16];
+
+        assert_eq!(&decrypted[..], &exprected_decrypted[..])
         // let plaintext = b"lorem ipsum dolo";
         // let mut p = convert_to_block(Box::new(*plaintext));
         // twofish.encrypt(&mut p);
