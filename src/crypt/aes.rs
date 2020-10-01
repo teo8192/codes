@@ -317,6 +317,7 @@ pub enum AESKey {
 pub struct AES {
     w: Vec<u8>,
     nr: usize,
+    mode: super::EncryptionMode,
 }
 
 impl Drop for AES {
@@ -343,7 +344,11 @@ impl AES {
         let mut w = vec![0u8; 16 * (nr + 1)];
         AES::key_expansion(&key, &mut w, nk, nr);
 
-        AES { w, nr }
+        AES {
+            w,
+            nr,
+            mode: super::EncryptionMode::CBC,
+        }
     }
 
     /// this is from the [NIST FIPS 197, AES](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf) paper.
@@ -459,6 +464,16 @@ impl BlockCipher for AES {
 
     fn block_size(&self) -> usize {
         16
+    }
+
+    fn change_encryption_mode(&mut self, mode: super::EncryptionMode) -> &mut Self {
+        self.mode = mode;
+
+        self
+    }
+
+    fn encryption_mode(&self) -> super::EncryptionMode {
+        self.mode
     }
 }
 
