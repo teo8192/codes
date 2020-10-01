@@ -46,20 +46,6 @@ impl Twofish {
         )
     }
 
-    fn round(&self, input: &mut [u32; 4], r: usize) {
-        let (f0, f1) = self.f(input[0], input[1], r);
-
-        let r0 = (input[2] ^ f0).rotate_right(1);
-        let r1 = input[3].rotate_left(1) ^ f1;
-        let r2 = input[0];
-        let r3 = input[1];
-
-        input[0] = r0;
-        input[1] = r1;
-        input[2] = r2;
-        input[3] = r3;
-    }
-
     fn encrypt(&self, input: &mut [u32; 4]) {
         for (n, b) in input.iter_mut().enumerate() {
             *b ^= self.k[n];
@@ -93,8 +79,8 @@ impl Twofish {
     fn decrypt(&self, input: &mut [u32; 4]) {
         let mut c = [0u32; 4];
 
-        for i in 0..4 {
-            c[i] = input[(i + 2) & 3] ^ self.k[i + 4];
+        for (n, b) in input.iter().enumerate() {
+            c[(n + 2) & 3] = *b ^ self.k[n + 4];
         }
 
         for (n, b) in input.iter_mut().enumerate() {
@@ -102,7 +88,17 @@ impl Twofish {
         }
 
         for r in (0..16).rev() {
-            self.round(input, r);
+            let (f0, f1) = self.f(input[2], input[3], r);
+
+            let r2 = input[0].rotate_left(1) ^ f0;
+            let r3 = (input[1] ^ f1).rotate_right(1);
+            let r0 = input[2];
+            let r1 = input[3];
+
+            input[0] = r0;
+            input[1] = r1;
+            input[2] = r2;
+            input[3] = r3;
         }
 
         for (n, b) in input.iter_mut().enumerate() {
@@ -330,7 +326,6 @@ fn expand_key(key: &[u8]) -> (Box<[u32; 40]>, Vec<u32>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypt::pbkdf2;
 
     #[test]
     fn test_convert_block() {
@@ -346,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn twofish_test() {
+    fn test_encryption() {
         // let key = pbkdf2(b"password".to_vec(), (0..16).collect(), 1000, 256);
         let key: Vec<u8> = std::iter::repeat(0).take(16).collect::<Vec<u8>>();
         let twofish = Twofish::new(&key[..]);
@@ -374,23 +369,26 @@ mod tests {
         let ciphertext = convert_from_block(ciphertext);
 
         assert_eq!(&ciphertext[..], &exprected_encrypted[..]);
+    }
 
-        let mut decrypted = convert_to_block(ciphertext);
+    #[test]
+    fn test_decryption() {
+        let key: Vec<u8> = std::iter::repeat(0).take(16).collect::<Vec<u8>>();
+        let twofish = Twofish::new(&key[..]);
+        let encrypted: [u8; 16] = [
+            0x9F, 0x58, 0x9F, 0x5C, 0xF6, 0x12, 0x2C, 0x32, 0xB6, 0xBF, 0xEC, 0x2F, 0x2A, 0xE8,
+            0xC3, 0x5A,
+        ];
 
-        twofish.decrypt(&mut decrypted);
+        let mut ciphertext = convert_to_block(Box::new(encrypted));
 
-        let decrypted = convert_from_block(decrypted);
+        twofish.decrypt(&mut ciphertext);
+
+        let decrypted = convert_from_block(ciphertext);
 
         let exprected_decrypted = [0u8; 16];
 
         assert_eq!(&decrypted[..], &exprected_decrypted[..])
-        // let plaintext = b"lorem ipsum dolo";
-        // let mut p = convert_to_block(Box::new(*plaintext));
-        // twofish.encrypt(&mut p);
-
-        // println!("{:?}", p);
-
-        // assert!(false);
     }
 
     #[test]
