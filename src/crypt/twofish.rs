@@ -1,3 +1,5 @@
+use super::BlockCipher;
+
 macro_rules! sum {
     ($elem1:expr, $elem2:expr, $( $rest:expr ),+ ) => {{
         sum!($elem1.overflowing_add($elem2).0, $( $rest ),+)
@@ -45,8 +47,12 @@ impl Twofish {
             sum!(t_0, t_1.overflowing_shl(1).0, self.k[2 * r + 9]),
         )
     }
+}
 
-    fn encrypt(&self, input: &mut [u32; 4]) {
+impl BlockCipher for Twofish {
+    fn encrypt_block(&self, block: &mut [u8]) {
+        let mut input = convert_to_block(block);
+
         for (n, b) in input.iter_mut().enumerate() {
             *b ^= self.k[n];
         }
@@ -74,9 +80,16 @@ impl Twofish {
         for (n, b) in input.iter_mut().enumerate() {
             *b = c[n];
         }
+
+        let o = convert_from_block(input);
+        for (block, out) in block.iter_mut().zip(o.iter()) {
+            *block = *out;
+        }
     }
 
-    fn decrypt(&self, input: &mut [u32; 4]) {
+    fn decrypt_block(&self, block: &mut [u8]) {
+        let mut input = convert_to_block(block);
+
         let mut c = [0u32; 4];
 
         for (n, b) in input.iter().enumerate() {
@@ -104,10 +117,23 @@ impl Twofish {
         for (n, b) in input.iter_mut().enumerate() {
             *b ^= self.k[n];
         }
+
+        let o = convert_from_block(input);
+        for (block, out) in block.iter_mut().zip(o.iter()) {
+            *block = *out;
+        }
+    }
+
+    fn block_size(&self) -> usize {
+        16
+    }
+
+    fn change_encryption_mode(&mut self, mode: super::EncryptionMode) -> &mut Self {
+        self
     }
 }
 
-fn convert_to_block(block: Box<[u8; 16]>) -> Box<[u32; 4]> {
+fn convert_to_block(block: &[u8]) -> Box<[u32; 4]> {
     let mut p = [0; 4];
 
     for i in 0..4 {
@@ -334,7 +360,7 @@ mod tests {
             *i = n as u8;
         }
 
-        let converted = convert_to_block(Box::new(bytes.clone()));
+        let converted = convert_to_block(&bytes);
         let back = convert_from_block(converted);
 
         assert_eq!(back[..], bytes[..]);
@@ -362,11 +388,9 @@ mod tests {
             0xC3, 0x5A,
         ];
 
-        let mut ciphertext = convert_to_block(Box::new([0u8; 16]));
+        let mut ciphertext = [0u8; 16];
 
-        twofish.encrypt(&mut ciphertext);
-
-        let ciphertext = convert_from_block(ciphertext);
+        twofish.encrypt_block(&mut ciphertext[..]);
 
         assert_eq!(&ciphertext[..], &exprected_encrypted[..]);
     }
@@ -375,20 +399,16 @@ mod tests {
     fn test_decryption() {
         let key: Vec<u8> = std::iter::repeat(0).take(16).collect::<Vec<u8>>();
         let twofish = Twofish::new(&key[..]);
-        let encrypted: [u8; 16] = [
+        let mut encrypted: [u8; 16] = [
             0x9F, 0x58, 0x9F, 0x5C, 0xF6, 0x12, 0x2C, 0x32, 0xB6, 0xBF, 0xEC, 0x2F, 0x2A, 0xE8,
             0xC3, 0x5A,
         ];
 
-        let mut ciphertext = convert_to_block(Box::new(encrypted));
-
-        twofish.decrypt(&mut ciphertext);
-
-        let decrypted = convert_from_block(ciphertext);
+        twofish.decrypt_block(&mut encrypted[..]);
 
         let exprected_decrypted = [0u8; 16];
 
-        assert_eq!(&decrypted[..], &exprected_decrypted[..])
+        assert_eq!(&encrypted[..], &exprected_decrypted[..])
     }
 
     #[test]
