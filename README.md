@@ -9,6 +9,7 @@ Here is some of the resources used:
  - Secure Hashing Algorithm (SHA) [NIST FIPS 180-4](https://csrc.nist.gov/publications/detail/fips/180/4/final)
  - PBKDF2: [RFC8018](https://tools.ietf.org/html/rfc8018)
  - [Twofish](https://www.schneier.com/academic/archives/1998/06/twofish_a_128-bit_bl.html)
+ - Chacha: [RFC8439](https://tools.ietf.org/html/rfc8439)
  
 Generate the documentation with
 
