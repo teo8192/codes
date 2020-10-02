@@ -2,6 +2,7 @@ pub mod aes;
 pub use aes::{AESKey, AES};
 
 pub mod twofish;
+pub mod chacha20;
 
 /// Naive textbook implementation of RSA.
 pub mod rsa;
