@@ -1,3 +1,15 @@
+use super::Cipher;
+
+macro_rules! min {
+    ($a:expr, $b:expr) => {{
+        if $a < $b {
+            $a
+        } else {
+            $b
+        }
+    }};
+}
+
 macro_rules! qr {
     ($a:expr, $b:expr, $c:expr, $d:expr) => {{
         $a = $a.overflowing_add($b).0;
@@ -35,6 +47,19 @@ macro_rules! double_round {
         quarter_round!($state, 2, 7, 8, 13);
         quarter_round!($state, 3, 4, 9, 14);
     }};
+}
+
+fn increment(counter: &mut [u8; 8]) {
+    let mut idx = 0;
+    let mut rollover = true;
+
+    while rollover && idx < 8 {
+        let (c, r) = counter[idx].overflowing_add(1);
+        counter[idx] = c;
+        rollover = r;
+
+        idx += 1;
+    }
 }
 
 /// Nonce is a non-sectret that may be used only once per encryption.
@@ -93,6 +118,54 @@ pub fn chacha20_block(key: &[u8; 32], counter: &[u8; 8], nonce: &[u8; 8]) -> Box
     Box::new(res)
 }
 
+pub struct ChaCha20 {
+    key: Box<[u8; 32]>,
+}
+
+impl ChaCha20 {
+    pub fn new(key: &[u8; 32]) -> Self {
+        ChaCha20 {
+            key: Box::new(*key),
+        }
+    }
+}
+
+impl Cipher for ChaCha20 {
+    /// Encrypt some text with the ChaCha20 stream cipher.
+    /// The nonce has to be unique for every encryption.
+    fn encrypt(&self, nonce: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
+        if nonce.len() != 8 {
+            return Err(format!("nonce len is {} but should be 8.", nonce.len()));
+        }
+        let mut counter = [0u8; 8];
+        counter[0] = 1;
+        let mut n = [0u8; 8];
+        for (i, b) in nonce.iter().zip(n.iter_mut()) {
+            *b = *i;
+        }
+
+        let len = plaintext.len();
+        // ceil(divide by 64)
+        let blocks = len >> 6 + if len & 63 == 0 { 0 } else { 1 };
+
+        for i in 0..blocks {
+            let enc = chacha20_block(&self.key, &counter, &n);
+            increment(&mut counter);
+            for j in 0..min!(len - (i << 6), 64) {
+                plaintext[(i << 6) + j] ^= enc[j];
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Decrypt something encrypted with ChaCha20.
+    /// This is the same as encrypting it, so no worries
+    fn decrypt(&self, nonce: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
+        self.encrypt(nonce, ciphertext)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,17 +217,8 @@ mod tests {
         let mut nonce = [0u8; 8];
         nonce[3] = 9;
         nonce[7] = 0x4a;
-        let counter = [ 0,0,0,0,0,0,0,1 ];
+        let counter = [0, 0, 0, 0, 0, 0, 0, 1];
 
-        let enc = chacha20_block(&key, &counter, &nonce);
-
-        // let expected = [
-// 0x10,  0xf1,  0xe7,  0xe4,  0xd1,  0x3b,  0x59,  0x15,  0x50,  0x0f,  0xdd,  0x1f,  0xa3,  0x20,  0x71,  0xc4, 
-// 0xc7,  0xd1,  0xf4,  0xc7,  0x33,  0xc0,  0x68,  0x03,  0x04,  0x22,  0xaa,  0x9a,  0xc3,  0xd4,  0x6c,  0x4e, 
-// 0xd2,  0x82,  0x64,  0x46,  0x07,  0x9f,  0xaa,  0x09,  0x14,  0xc2,  0xd7,  0x05,  0xd9,  0x8b,  0x02,  0xa2, 
-// 0xb5,  0x12,  0x9c,  0xd1,  0xde,  0x16,  0x4e,  0xb9,  0xcb,  0xd0,  0x83,  0xe8,  0xa2,  0x50,  0x3c,  0x4e, 
-        // ];
-
-        // assert_eq!(&enc[..], &expected[..]);
+        let _enc = chacha20_block(&key, &counter, &nonce);
     }
 }
