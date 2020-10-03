@@ -1,8 +1,8 @@
 pub mod aes;
 pub use aes::{AESKey, AES};
 
-pub mod twofish;
 pub mod chacha20;
+pub mod twofish;
 
 /// Naive textbook implementation of RSA.
 pub mod rsa;
@@ -19,6 +19,12 @@ pub mod mac;
 pub enum EncryptionMode {
     CBC, //< Cipher Block Chaining, input vectors should be unpredictable and not reused.
     ECB, //< Electronic Codebook mode, You should rather use CBC or something
+}
+
+pub trait Cipher {
+    fn encrypt(&self, iv: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String>;
+
+    fn decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String>;
 }
 
 fn pad(bytes: &mut Vec<u8>, bs: usize) {
@@ -56,126 +62,22 @@ fn strip_padding(bytes: &mut Vec<u8>) {
     bytes.drain((bytes.len() - end)..bytes.len());
 }
 
-/// Encrypt bytes in CBC mode.
-/// It will always add padding.
-fn cbc_encrypt<B: BlockCipher>(
-    cipher: &B,
-    iv: &Vec<u8>,
-    plaintext: &mut Vec<u8>,
-) -> Result<(), String> {
-    if iv.len() != cipher.block_size() {
-        return Err(format!(
-            "input vector is wrong length, expected {}, got {}",
-            cipher.block_size(),
-            iv.len()
-        ));
-    }
-    let bs = cipher.block_size();
-    let mut prev_block: Vec<u8> = iv.clone();
-
-    pad(plaintext, bs);
-
-    for i in 0..plaintext.len() / bs {
-        for j in 0..bs {
-            plaintext[i * bs + j] ^= prev_block[j];
-        }
-
-        cipher.encrypt_block(&mut plaintext[(i * bs)..((i + 1) * bs)]);
-
-        for j in 0..bs {
-            prev_block[j] = plaintext[(i * bs) + j];
-        }
-    }
-    Ok(())
-}
-
-/// Decrypt bytes that was encrypted in CBC mode
-fn cbc_decrypt<B: BlockCipher>(
-    cipher: &B,
-    iv: &Vec<u8>,
-    ciphertext: &mut Vec<u8>,
-) -> Result<(), String> {
-    let bs = cipher.block_size();
-
-    if iv.len() != bs {
-        return Err(format!(
-            "input vector is wrong length, expected {}, got {}",
-            bs,
-            iv.len()
-        ));
-    }
-    if ciphertext.len() % bs != 0 {
-        return Err(format!(
-            "ciphertext length ({}) should be a multiple of the blocksize ({})",
-            ciphertext.len(),
-            bs,
-        ));
-    }
-    let mut prev_block = iv.clone();
-
-    for i in 0..(ciphertext.len() / bs) {
-        let current_block = &mut ciphertext[(i * bs)..((i + 1) * bs)];
-
-        // save the current ciphertext to remove
-        // the chaining of the next block
-        let pb = prev_block.clone();
-        for i in 0..bs {
-            prev_block[i] = current_block[i];
-        }
-
-        // decrypt current block
-        cipher.decrypt_block(current_block);
-
-        // Reverse the chaining
-        for j in 0..bs {
-            current_block[j] ^= pb[j];
+impl Cipher for dyn BlockCipher {
+    fn encrypt(&self, iv: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
+        use EncryptionMode::*;
+        match self.encryption_mode() {
+            CBC => self.cbc_encrypt(iv, plaintext),
+            ECB => self.ecb_encrypt(iv, plaintext),
         }
     }
 
-    strip_padding(ciphertext);
-
-    Ok(())
-}
-
-fn ecb_encrypt<B: BlockCipher>(
-    cipher: &B,
-    _: &Vec<u8>,
-    plaintext: &mut Vec<u8>,
-) -> Result<(), String> {
-    let bs = cipher.block_size();
-
-    pad(plaintext, bs);
-
-    for i in 0..plaintext.len() / bs {
-        cipher.encrypt_block(&mut plaintext[(i * bs)..((i + 1) * bs)]);
+    fn decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
+        use EncryptionMode::*;
+        match self.encryption_mode() {
+            CBC => self.cbc_decrypt(iv, ciphertext),
+            ECB => self.ecb_decrypt(iv, ciphertext),
+        }
     }
-
-    Ok(())
-}
-
-fn ecb_decrypt<B: BlockCipher>(
-    cipher: &B,
-    _: &Vec<u8>,
-    ciphertext: &mut Vec<u8>,
-) -> Result<(), String> {
-    let bs = cipher.block_size();
-
-    if ciphertext.len() % bs != 0 {
-        return Err(format!(
-            "ciphertext length ({}) should be a multiple of the blocksize ({})",
-            ciphertext.len(),
-            bs,
-        ));
-    }
-
-    for i in 0..(ciphertext.len() / bs) {
-        // decrypt current block
-        cipher.decrypt_block(&mut ciphertext[(i * bs)..((i + 1) * bs)]);
-    }
-
-    strip_padding(ciphertext);
-
-    Ok(())
 }
 
 /// Any block cipher implementingthis trait may be used with the implementation of CBC.
@@ -192,28 +94,114 @@ pub trait BlockCipher {
     }
 
     /// Change the encryption mode.
-    fn change_encryption_mode(&mut self, mode: EncryptionMode) -> &mut Self;
+    fn change_encryption_mode(&mut self, mode: EncryptionMode) {}
+}
 
-    fn encrypt(&self, iv: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String>
-    where
-        Self: std::marker::Sized,
-    {
-        use EncryptionMode::*;
-        match self.encryption_mode() {
-            CBC => cbc_encrypt(self, iv, plaintext),
-            ECB => ecb_encrypt(self, iv, plaintext),
+impl dyn BlockCipher {
+    /// Encrypt bytes in CBC mode.
+    /// It will always add padding.
+    fn cbc_encrypt(&self, iv: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
+        if iv.len() != self.block_size() {
+            return Err(format!(
+                "input vector is wrong length, expected {}, got {}",
+                self.block_size(),
+                iv.len()
+            ));
         }
+        let bs = self.block_size();
+        let mut prev_block: Vec<u8> = iv.clone();
+
+        pad(plaintext, bs);
+
+        for i in 0..plaintext.len() / bs {
+            for j in 0..bs {
+                plaintext[i * bs + j] ^= prev_block[j];
+            }
+
+            self.encrypt_block(&mut plaintext[(i * bs)..((i + 1) * bs)]);
+
+            for j in 0..bs {
+                prev_block[j] = plaintext[(i * bs) + j];
+            }
+        }
+        Ok(())
     }
 
-    fn decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String>
-    where
-        Self: std::marker::Sized,
-    {
-        use EncryptionMode::*;
-        match self.encryption_mode() {
-            CBC => cbc_decrypt(self, iv, ciphertext),
-            ECB => ecb_decrypt(self, iv, ciphertext),
+    /// Decrypt bytes that was encrypted in CBC mode
+    fn cbc_decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
+        let bs = self.block_size();
+
+        if iv.len() != bs {
+            return Err(format!(
+                "input vector is wrong length, expected {}, got {}",
+                bs,
+                iv.len()
+            ));
         }
+        if ciphertext.len() % bs != 0 {
+            return Err(format!(
+                "ciphertext length ({}) should be a multiple of the blocksize ({})",
+                ciphertext.len(),
+                bs,
+            ));
+        }
+        let mut prev_block = iv.clone();
+
+        for i in 0..(ciphertext.len() / bs) {
+            let current_block = &mut ciphertext[(i * bs)..((i + 1) * bs)];
+
+            // save the current ciphertext to remove
+            // the chaining of the next block
+            let pb = prev_block.clone();
+            for i in 0..bs {
+                prev_block[i] = current_block[i];
+            }
+
+            // decrypt current block
+            self.decrypt_block(current_block);
+
+            // Reverse the chaining
+            for j in 0..bs {
+                current_block[j] ^= pb[j];
+            }
+        }
+
+        strip_padding(ciphertext);
+
+        Ok(())
+    }
+
+    fn ecb_encrypt(&self, _: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
+        let bs = self.block_size();
+
+        pad(plaintext, bs);
+
+        for i in 0..plaintext.len() / bs {
+            self.encrypt_block(&mut plaintext[(i * bs)..((i + 1) * bs)]);
+        }
+
+        Ok(())
+    }
+
+    fn ecb_decrypt(&self, _: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
+        let bs = self.block_size();
+
+        if ciphertext.len() % bs != 0 {
+            return Err(format!(
+                "ciphertext length ({}) should be a multiple of the blocksize ({})",
+                ciphertext.len(),
+                bs,
+            ));
+        }
+
+        for i in 0..(ciphertext.len() / bs) {
+            // decrypt current block
+            self.decrypt_block(&mut ciphertext[(i * bs)..((i + 1) * bs)]);
+        }
+
+        strip_padding(ciphertext);
+
+        Ok(())
     }
 }
 

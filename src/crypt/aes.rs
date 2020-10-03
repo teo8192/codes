@@ -2,7 +2,7 @@
 //!
 //! An example usage:
 //!
-//!     # use codes::crypt::{aes::{AES, AESKey}, BlockCipher, pbkdf2};
+//!     # use codes::crypt::{aes::{AES, AESKey}, BlockCipher, pbkdf2, Cipher};
 //!     # let secret_password = b"top secret lol".to_vec();
 //!     # let salt = (0..23).collect();
 //!     # let iteration_count = 10000;
@@ -239,57 +239,6 @@ impl<'a> From<&'a mut [u8]> for Block<'a> {
     }
 }
 
-// impl std::iter::FromIterator<u8> for Block {
-//     fn from_iter<I: IntoIterator<Item = u8>>(iter: I) -> Self {
-//         let mut bytes = Box::new([0u8; 16]);
-//         let mut i = 0;
-//         for b in iter {
-//             // i want to use enumberate, but I am not allowed (needs an Iterator, not IntoIterator)
-//             bytes[i] = b;
-//             i += 1;
-//         }
-//         Block { data: bytes[..] }
-//     }
-// }
-
-// impl From<&[u8; 16]> for Block {
-//     fn from(bytes: &[u8; 16]) -> Self {
-//         Block {
-//             data: Box::new(*bytes),
-//         }
-//     }
-// }
-
-// impl From<Vec<u8>> for Block {
-//     fn from(bytes: Vec<u8>) -> Self {
-//         let mut data = Box::new([0u8; 16]);
-//         for i in 0..16 {
-//             data[i] = bytes[i];
-//         }
-
-//         Block { data }
-//     }
-// }
-
-// macro_rules! from_block {
-//     ( $( $b:ty )* ) => {
-//         $(
-//             impl From<$b> for Vec<u8> {
-//                 fn from(block: $b) -> Self {
-//                     let mut new = Vec::with_capacity(16);
-//                     for b in block.data.iter() {
-//                         new.push(*b);
-//                     }
-
-//                     new
-//                 }
-//             }
-//         )*
-//     };
-// }
-
-// from_block!(Block &Block &mut Block);
-
 impl<'a> std::fmt::Display for Block<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for x in 0..4 {
@@ -332,7 +281,7 @@ impl AES {
     /// Initialize the AES-thingy with the specified key.
     /// The key needs to be exactly the correct size,
     /// e.g. if you want 128, use exactly 16 bytes, 24 for 192, 32 for 256
-    pub fn new(key_size: AESKey) -> AES {
+    pub fn new(key_size: AESKey) -> Box<dyn BlockCipher> {
         use AESKey::*;
         let (key, nr, nk) = match &key_size {
             AES128(key) => (&key[..], 10, 4),
@@ -344,11 +293,11 @@ impl AES {
         let mut w = vec![0u8; 16 * (nr + 1)];
         AES::key_expansion(&key, &mut w, nk, nr);
 
-        AES {
+        Box::new(AES {
             w,
             nr,
             mode: super::EncryptionMode::CBC,
-        }
+        })
     }
 
     /// this is from the [NIST FIPS 197, AES](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf) paper.
@@ -466,10 +415,8 @@ impl BlockCipher for AES {
         16
     }
 
-    fn change_encryption_mode(&mut self, mode: super::EncryptionMode) -> &mut Self {
+    fn change_encryption_mode(&mut self, mode: super::EncryptionMode) {
         self.mode = mode;
-
-        self
     }
 
     fn encryption_mode(&self) -> super::EncryptionMode {
@@ -481,7 +428,7 @@ impl BlockCipher for AES {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypt::BlockCipher;
+    use crate::crypt::{BlockCipher, Cipher};
 
     #[test]
     fn test_multiplication() {

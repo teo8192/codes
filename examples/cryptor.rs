@@ -1,5 +1,7 @@
+use codes::crypt::aes::{AESKey, AES};
 use codes::crypt::pbkdf2;
-use codes::crypt::{AESKey, BlockCipher, AES};
+use codes::crypt::twofish::Twofish;
+use codes::crypt::Cipher;
 use codes::error::hamming::ErrorDetection;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -14,13 +16,41 @@ enum Mode {
 }
 
 #[derive(StructOpt)]
+enum CipherType {
+    #[structopt(name = "aes")]
+    AES,
+    #[structopt(name = "twofish")]
+    Twofish,
+}
+
+impl Default for CipherType {
+    fn default() -> Self {
+        Self::AES
+    }
+}
+
+impl std::str::FromStr for CipherType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "aes" => Ok(Self::AES),
+            "twofish" => Ok(Self::Twofish),
+            _ => Err(format!("{} is an unrcognized cipher", s)),
+        }
+    }
+}
+
+#[derive(StructOpt)]
 #[structopt(name = "cryptor", about = "Simple CLI encryption tool.")]
 struct Cli {
-    #[structopt(short, long)]
+    #[structopt(short, long, help = "The input file.")]
     input: Option<String>,
-    #[structopt(short, long)]
+    #[structopt(short, long, help = "The output file.")]
     output: Option<String>,
-    #[structopt(short, long)]
+    #[structopt(short, long, help = "The cipher to use.")]
+    cipher: CipherType,
+    #[structopt(short, long, help = "Choose a good password.")]
     password: String,
     #[structopt(subcommand)]
     mode: Mode,
@@ -52,12 +82,14 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
 
     let iv = (0..16).collect();
 
-    // initialize the encryption
-    let aes = AES::new(AESKey::AES256(key));
+    let cipher = match args.cipher {
+        CipherType::AES => AES::new(AESKey::AES256(key)),
+        CipherType::Twofish => Twofish::new(&key),
+    };
 
     let data = match args.mode {
         Mode::Encrypt => {
-            aes.encrypt(&iv, &mut bytes).unwrap();
+            cipher.encrypt(&iv, &mut bytes).unwrap();
             bytes.into_iter().encode().collect()
         }
         Mode::Decrypt => {
@@ -65,7 +97,7 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
             while bytes.len() & 15 != 0 {
                 bytes.pop();
             }
-            aes.decrypt(&iv, &mut bytes).unwrap();
+            cipher.decrypt(&iv, &mut bytes).unwrap();
             bytes
         }
     };
