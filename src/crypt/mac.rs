@@ -6,8 +6,10 @@ const SHA512_BLOCKSIZE: usize = 1024 >> 3;
 pub fn hmac(key: &Vec<u8>, text: &Vec<u8>, tag_len: usize) -> Vec<u8> {
     debug_assert!(tag_len <= HMAC_LEN, "tag length exceeds hash length");
     let mut k_0 = key.clone();
+    let hash = HashAlg::Sha512;
+
     if k_0.len() > SHA512_BLOCKSIZE {
-        let res: Box<[u8; HMAC_LEN]> = k_0.iter().map(|x| *x).hash();
+        let res: Box<[u8]> = hash.hash(k_0.iter());
         let mut out = Vec::new();
         for i in (*res).iter() {
             out.push(*i);
@@ -39,7 +41,7 @@ pub fn hmac(key: &Vec<u8>, text: &Vec<u8>, tag_len: usize) -> Vec<u8> {
         kxoripad.push(*b);
     }
 
-    let res: Box<[u8; HMAC_LEN]> = kxoripad.iter().map(|x| *x).hash();
+    let res = hash.hash(kxoripad.iter());
 
     let mut kxoropad = Vec::new();
 
@@ -49,7 +51,8 @@ pub fn hmac(key: &Vec<u8>, text: &Vec<u8>, tag_len: usize) -> Vec<u8> {
 
     kxoropad.append(&mut res.to_vec());
 
-    let mac: Box<[u8; HMAC_LEN]> = kxoropad.iter().map(|x| *x).hash();
+    let mac = hash.hash(kxoropad.iter());
+
     mac[0..tag_len].to_vec()
 }
 
