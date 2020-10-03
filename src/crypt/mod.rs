@@ -27,59 +27,6 @@ pub trait Cipher {
     fn decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String>;
 }
 
-fn pad(bytes: &mut Vec<u8>, bs: usize) {
-    let len: u32 = bytes.len() as u32;
-    let end_bytes: u32 = 32 >> 3;
-    let zeros = bs - ((end_bytes + len + 1) as usize % bs);
-
-    // The leading one
-    let one = [1u8 << 7].iter();
-
-    // the number at the end
-    let end_num = (zeros as u32 + end_bytes + 1).to_le_bytes();
-
-    // Has to be repeated reference to 0 since the other iterators operate on &u8
-    let zeros = std::iter::repeat(&0u8).take(zeros);
-
-    // append a one, a lot of zeros and then the number of padded bytes
-    // ends up something like this:
-    // 1 0 0 0 0 0 0 0 0 0 0 12
-    bytes.append(&mut one.chain(zeros).chain(end_num.iter()).map(|x| *x).collect());
-}
-
-fn strip_padding(bytes: &mut Vec<u8>) {
-    let mut end = [0u8; 4];
-    let offset = bytes.len() - std::mem::size_of::<u32>();
-
-    for i in 0..4 {
-        end[i] = bytes[i + offset];
-    }
-
-    // Get the number at the end
-    let end = u32::from_le_bytes(end) as usize;
-
-    // Drain the padding from the vector
-    bytes.drain((bytes.len() - end)..bytes.len());
-}
-
-impl Cipher for dyn BlockCipher {
-    fn encrypt(&self, iv: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
-        use EncryptionMode::*;
-        match self.encryption_mode() {
-            CBC => self.cbc_encrypt(iv, plaintext),
-            ECB => self.ecb_encrypt(iv, plaintext),
-        }
-    }
-
-    fn decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
-        use EncryptionMode::*;
-        match self.encryption_mode() {
-            CBC => self.cbc_decrypt(iv, ciphertext),
-            ECB => self.ecb_decrypt(iv, ciphertext),
-        }
-    }
-}
-
 /// Any block cipher implementingthis trait may be used with the implementation of CBC.
 pub trait BlockCipher {
     fn encrypt_block(&self, block: &mut [u8]);
@@ -202,6 +149,59 @@ impl dyn BlockCipher {
         strip_padding(ciphertext);
 
         Ok(())
+    }
+}
+
+fn pad(bytes: &mut Vec<u8>, bs: usize) {
+    let len: u32 = bytes.len() as u32;
+    let end_bytes: u32 = 32 >> 3;
+    let zeros = bs - ((end_bytes + len + 1) as usize % bs);
+
+    // The leading one
+    let one = [1u8 << 7].iter();
+
+    // the number at the end
+    let end_num = (zeros as u32 + end_bytes + 1).to_le_bytes();
+
+    // Has to be repeated reference to 0 since the other iterators operate on &u8
+    let zeros = std::iter::repeat(&0u8).take(zeros);
+
+    // append a one, a lot of zeros and then the number of padded bytes
+    // ends up something like this:
+    // 1 0 0 0 0 0 0 0 0 0 0 12
+    bytes.append(&mut one.chain(zeros).chain(end_num.iter()).map(|x| *x).collect());
+}
+
+fn strip_padding(bytes: &mut Vec<u8>) {
+    let mut end = [0u8; 4];
+    let offset = bytes.len() - std::mem::size_of::<u32>();
+
+    for i in 0..4 {
+        end[i] = bytes[i + offset];
+    }
+
+    // Get the number at the end
+    let end = u32::from_le_bytes(end) as usize;
+
+    // Drain the padding from the vector
+    bytes.drain((bytes.len() - end)..bytes.len());
+}
+
+impl Cipher for dyn BlockCipher {
+    fn encrypt(&self, iv: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
+        use EncryptionMode::*;
+        match self.encryption_mode() {
+            CBC => self.cbc_encrypt(iv, plaintext),
+            ECB => self.ecb_encrypt(iv, plaintext),
+        }
+    }
+
+    fn decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
+        use EncryptionMode::*;
+        match self.encryption_mode() {
+            CBC => self.cbc_decrypt(iv, ciphertext),
+            ECB => self.ecb_decrypt(iv, ciphertext),
+        }
     }
 }
 

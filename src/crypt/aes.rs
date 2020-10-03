@@ -28,7 +28,7 @@
 //!
 //!     assert_eq!(plaintext, message);
 
-use crate::crypt::BlockCipher;
+use crate::crypt::{BlockCipher, Cipher};
 
 // {{{ constant substitution boxes.
 // these should probably be removed, and replaced by a coputational alternative.
