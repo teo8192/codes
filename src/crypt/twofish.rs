@@ -24,24 +24,24 @@ macro_rules! ror41 {
 }
 
 pub struct Twofish {
-    s: Vec<u32>,
-    k: Box<[u32; 40]>,
+    sub_box: Vec<u32>,
+    key: Box<[u32; 40]>,
 }
 
 impl Twofish {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(key: &[u8]) -> Box<dyn BlockCipher> {
-        let (k, s) = expand_key(key);
-        Box::new(Twofish { s, k })
+        let (key, sub_box) = expand_key(key);
+        Box::new(Twofish { sub_box, key })
     }
 
     fn feistel(&self, r_0: u32, r_1: u32, r: usize) -> (u32, u32) {
-        let t_0 = h(r_0, &self.s);
-        let t_1 = h(rotl!(r_1, 8), &self.s);
+        let t_0 = h(r_0, &self.sub_box);
+        let t_1 = h(rotl!(r_1, 8), &self.sub_box);
 
         (
-            sum!(t_0, t_1, self.k[2 * r + 8]),
-            sum!(t_0, t_1.overflowing_shl(1).0, self.k[2 * r + 9]),
+            sum!(t_0, t_1, self.key[2 * r + 8]),
+            sum!(t_0, t_1.overflowing_shl(1).0, self.key[2 * r + 9]),
         )
     }
 }
@@ -51,7 +51,7 @@ impl BlockCipher for Twofish {
         let mut input = convert_to_block(block);
 
         for (n, b) in input.iter_mut().enumerate() {
-            *b ^= self.k[n];
+            *b ^= self.key[n];
         }
 
         for r in 0..16 {
@@ -71,7 +71,7 @@ impl BlockCipher for Twofish {
         let mut c = [0u32; 4];
 
         for i in 0..4 {
-            c[i] = input[(i + 2) & 3] ^ self.k[i + 4];
+            c[i] = input[(i + 2) & 3] ^ self.key[i + 4];
         }
 
         for (n, b) in input.iter_mut().enumerate() {
@@ -90,7 +90,7 @@ impl BlockCipher for Twofish {
         let mut c = [0u32; 4];
 
         for (n, b) in input.iter().enumerate() {
-            c[(n + 2) & 3] = *b ^ self.k[n + 4];
+            c[(n + 2) & 3] = *b ^ self.key[n + 4];
         }
 
         for (n, b) in input.iter_mut().enumerate() {
@@ -112,7 +112,7 @@ impl BlockCipher for Twofish {
         }
 
         for (n, b) in input.iter_mut().enumerate() {
-            *b ^= self.k[n];
+            *b ^= self.key[n];
         }
 
         let o = convert_from_block(&input);
