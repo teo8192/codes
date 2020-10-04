@@ -49,23 +49,12 @@ macro_rules! double_round {
     }};
 }
 
-fn increment(counter: &mut [u8; 8]) {
-    let mut idx = 0;
-    let mut rollover = true;
-
-    while rollover && idx < 8 {
-        let (c, r) = counter[idx].overflowing_add(1);
-        counter[idx] = c;
-        rollover = r;
-
-        idx += 1;
-    }
-}
-
-fn initialize_block(block: &mut [u32; 16], key: &[u8; 32], counter: &[u8; 8], nonce: &[u8; 8]) {
+// The counter is not added now, since that is the thing that is changed between each block.
+fn initialize_block(block: &mut [u32; 16], key: &[u8; 32], nonce: &[u8; 8]) {
     let blockconst = b"expand 32-byte k";
     let mut tmp = [0u8; 4];
 
+    // Add in the block constant
     for i in 0..4 {
         for j in 0..4 {
             tmp[i] = blockconst[(i << 2) + j];
@@ -73,6 +62,7 @@ fn initialize_block(block: &mut [u32; 16], key: &[u8; 32], counter: &[u8; 8], no
         block[i] = u32::from_le_bytes(tmp);
     }
 
+    // add in the key
     for i in 0..8 {
         for j in 0..4 {
             tmp[j] = key[j + (i << 2)];
@@ -80,13 +70,7 @@ fn initialize_block(block: &mut [u32; 16], key: &[u8; 32], counter: &[u8; 8], no
         block[i + 4] = u32::from_le_bytes(tmp);
     }
 
-    for i in 0..2 {
-        for j in 0..4 {
-            tmp[j] = counter[j + (i << 2)];
-        }
-        block[i + 12] = u32::from_le_bytes(tmp);
-    }
-
+    // add in the nonce
     for i in 0..2 {
         for j in 0..4 {
             tmp[j] = nonce[j + (i << 2)];
@@ -99,24 +83,31 @@ fn initialize_block(block: &mut [u32; 16], key: &[u8; 32], counter: &[u8; 8], no
 ///
 /// Since this function is probably called multiple times in a row, it takes the result block as
 /// the first argument instead of putting the result in a box. This is to save on heap allocations.
-pub fn chacha20_block(block: &mut [u8; 64], key: &[u8; 32], counter: &[u8; 8], nonce: &[u8; 8]) {
-    let mut state = [0u32; 16];
-    initialize_block(&mut state, key, counter, nonce);
+/// The in-block should be initialized, except for the counter.
+pub fn chacha20_block(in_block: &[u32; 16], out_block: &mut [u8], counter: &[u32; 2]) {
+    let mut state = *in_block;
+    state[12..14].clone_from_slice(&counter[..]);
 
     let mut init_state = state;
 
+    // do the 20 rounds (10 double rounds)
     for _ in 0..10 {
         double_round!(init_state);
     }
 
+    // This is a non-bijectove addition, so is makes it particulary difficult to reverse the block
     for (s, i) in state.iter_mut().zip(init_state.iter()) {
         *s = s.overflowing_add(*i).0;
     }
 
-    for i in 0..16 {
+    // convert the integers back to bytes
+    let len = out_block.len();
+    let words = len >> 2;
+    for i in 0..words {
         let tmp = state[i].to_le_bytes();
-        for j in 0..4 {
-            block[(i << 2) + j] = tmp[j];
+        // could be faster not doing this every time, but oh well
+        for j in 0..min!(4, len - (i << 2)) {
+            out_block[(i << 2) + j] ^= tmp[j];
         }
     }
 }
@@ -136,28 +127,23 @@ impl ChaCha20 {
 impl Cipher for ChaCha20 {
     /// Encrypt some text with the ChaCha20 stream cipher.
     /// The nonce has to be unique for every encryption.
-    fn encrypt(&self, nonce: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String> {
+    fn encrypt(&self, nonce: &[u8], plaintext: &mut [u8]) -> Result<(), String> {
         if nonce.len() != 8 {
             return Err(format!("nonce len is {} but should be 8.", nonce.len()));
         }
-        let mut counter = [0u8; 8];
-        counter[0] = 1;
         let mut n = [0u8; 8];
         for (i, b) in nonce.iter().zip(n.iter_mut()) {
             *b = *i;
         }
 
-        let len = plaintext.len();
-        // ceil(divide by 64)
-        let blocks = (len >> 6) + if len.trailing_zeros() >= 6 { 0 } else { 1 };
-        let mut block = [0u8; 64];
+        let mut block = [0u32; 16]; // the state
 
-        for i in 0..blocks {
-            chacha20_block(&mut block, &self.key, &counter, &n);
-            increment(&mut counter);
-            for j in 0..min!(len - (i << 6), 64) {
-                plaintext[(i << 6) + j] ^= block[j];
-            }
+        initialize_block(&mut block, &self.key, &n);
+
+        // this is parallelizable, the counter may be found with enumerate?
+        for (n, mut plain_block) in plaintext.chunks_mut(64).enumerate() {
+            // calculate the pseudo-random bytes
+            chacha20_block(&block, &mut plain_block, &[0, n as u32]);
         }
 
         Ok(())
@@ -165,7 +151,7 @@ impl Cipher for ChaCha20 {
 
     /// Decrypt something encrypted with ChaCha20.
     /// This is the same as encrypting it, so no worries
-    fn decrypt(&self, nonce: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String> {
+    fn decrypt(&self, nonce: &[u8], ciphertext: &mut [u8]) -> Result<(), String> {
         self.encrypt(nonce, ciphertext)
     }
 }
@@ -213,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn test_chacha() {
+    fn test_chacha() -> Result<(), String> {
         let mut key = [0u8; 32];
         for (k, n) in key.iter_mut().zip(0..0x20) {
             *k = n;
@@ -221,12 +207,48 @@ mod tests {
         let mut nonce = [0u8; 8];
         nonce[3] = 9;
         nonce[7] = 0x4a;
-        // the specification did not mention the endianess of the counter (and it is not
-        // particularily important, so this is a big-endian counter, because it will not be used as
-        // a counter when not in byte form)
-        let counter = [0, 0, 0, 0, 0, 0, 0, 1];
 
-        let mut block = [0u8; 64];
-        chacha20_block(&mut block, &key, &counter, &nonce);
+        let chacha20 = ChaCha20::new(&key);
+        let plaintext = *b"kake smakere godt :D";
+        let mut encrypted = plaintext;
+        chacha20.encrypt(&nonce, &mut encrypted)?;
+
+        assert_ne!(encrypted, plaintext);
+
+        chacha20.decrypt(&nonce, &mut encrypted)?;
+
+        assert_eq!(encrypted, plaintext);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_chacha_long() -> Result<(), String> {
+        let mut key = [0u8; 32];
+        for (k, n) in key.iter_mut().zip(0..0x20) {
+            *k = n;
+        }
+        let mut nonce = [0u8; 8];
+        nonce[3] = 9;
+        nonce[7] = 0x4a;
+
+        let chacha20 = ChaCha20::new(&key);
+        let plaintext = *b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+
+            Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
+
+            Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
+
+            In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.";
+        let mut encrypted = plaintext;
+        chacha20.encrypt(&nonce, &mut encrypted)?;
+
+        assert_ne!(encrypted[..], plaintext[..]);
+
+        chacha20.decrypt(&nonce, &mut encrypted)?;
+
+        assert_eq!(encrypted[..], plaintext[..]);
+
+        Ok(())
     }
 }
