@@ -190,7 +190,7 @@ pub fn strip_padding(bytes: &mut Vec<u8>) {
 impl Cipher for dyn BlockCipher {
     fn encrypt(&self, iv: &[u8], plaintext: &mut [u8]) -> Result<(), String> {
         if plaintext.len() % self.block_size() != 0 {
-            return Err(format!("You should consider padding your messages."));
+            return Err("You should consider padding your messages.".to_string());
         }
         use EncryptionMode::*;
         match self.encryption_mode() {
