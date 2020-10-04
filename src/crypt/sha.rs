@@ -253,7 +253,7 @@ where
             ],
         };
 
-        sha512_base(data.into_iter().map(|x| *x), &mut iv);
+        sha512_base(data.into_iter().copied(), &mut iv);
 
         match self {
             Sha512_224 => create_box!(iv, 224, u64),
@@ -263,112 +263,6 @@ where
         }
     }
 }
-
-// impl Hash<&[u8]> for HashAlg {
-//     fn hash(&self, data: &[u8]) -> Box<[u8]> {
-//         use HashAlg::*;
-
-//         let (mut iv, len) = match self {
-//             Sha384 => (
-//                 [
-//                     0xcbbb9d5dc1059ed8,
-//                     0x629a292a367cd507,
-//                     0x9159015a3070dd17,
-//                     0x152fecd8f70e5939,
-//                     0x67332667ffc00b31,
-//                     0x8eb44a8768581511,
-//                     0xdb0c2e0d64f98fa7,
-//                     0x47b5481dbefa4fa4,
-//                 ],
-//                 384,
-//             ),
-//             Sha512 => (
-//                 [
-//                     0x6a09e667f3bcc908,
-//                     0xbb67ae8584caa73b,
-//                     0x3c6ef372fe94f82b,
-//                     0xa54ff53a5f1d36f1,
-//                     0x510e527fade682d1,
-//                     0x9b05688c2b3e6c1f,
-//                     0x1f83d9abfb41bd6b,
-//                     0x5be0cd19137e2179,
-//                 ],
-//                 512,
-//             ),
-//             Sha512_256 => (
-//                 [
-//                     0x22312194FC2BF72C,
-//                     0x9F555FA3C84C64C2,
-//                     0x2393B86B6F53B151,
-//                     0x963877195940EABD,
-//                     0x96283EE2A88EFFE3,
-//                     0xBE5E1E2553863992,
-//                     0x2B0199FC2C85B8AA,
-//                     0x0EB72DDC81C52CA2,
-//                 ],
-//                 256,
-//             ),
-//             Sha512_224 => (
-//                 [
-//                     0x8C3D37C819544DA2,
-//                     0x73E1996689DCD4D6,
-//                     0x1DFAB7AE32FF9C82,
-//                     0x679DD514582F9FCF,
-//                     0x0F6D2B697BD44DA8,
-//                     0x77E36F7304C48942,
-//                     0x3F9D85A86A1D36C8,
-//                     0x1112E6AD91D692A1,
-//                 ],
-//                 224,
-//             ),
-//         };
-
-//         sha512_base(&mut data.iter().map(|x| *x), &mut iv);
-
-//         match len {
-//             224 => create_box!(iv, 224, u64),
-//             256 => create_box!(iv, 256, u64),
-//             384 => create_box!(iv, 384, u64),
-//             512 => create_box!(iv, 512, u64),
-//             _ => panic!("This is impossible"),
-//         }
-//     }
-// }
-
-// macro_rules! hash512alg {
-//     ( $iv:tt, $size:expr) => {
-//         impl<I: Iterator<Item = u8>> Hash<[u8; $size >> 3]> for I {
-//             fn hash(&mut self) -> Box<[u8; $size >> 3]> {
-//                 let mut iv = $iv;
-
-//                 sha512_base(self, &mut iv);
-
-//                 create_box!(iv, $size, u64)
-//             }
-//             fn size() -> usize {
-//                 $size
-//             }
-//         }
-
-//         impl Hash<[u8; $size >> 3]> for [u8] {
-//             fn hash(&mut self) -> Box<[u8; $size >> 3]> {
-//                 let mut iv = $iv;
-
-//                 sha512_base(&mut self.iter().map(|x| *x), &mut iv);
-
-//                 create_box!(iv, $size, u64)
-//             }
-//             fn size() -> usize {
-//                 $size
-//             }
-//         }
-//     };
-// }
-
-// hash512alg!(
-//     ,
-//     384
-// );
 
 fn sha512_base<I: Iterator<Item = u8>>(mut input: I, iv: &mut [u64; 8]) {
     let mut at_end = false;
@@ -402,14 +296,24 @@ fn sha512_base<I: Iterator<Item = u8>>(mut input: I, iv: &mut [u64; 8]) {
             counter += 1024;
         }
 
-        for i in 0..16 {
-            let bidx = i << 3;
-            for n in 0..8 {
-                m[i] |= (bytes[bidx + n] as u64)
-                    .overflowing_shl(((7 - n) as u32) << 3)
-                    .0;
-            }
+        for (i, messbyte) in m.iter_mut().enumerate() {
+            // let bidx = i << 3;
+            let mut b = [0u8; 8];
+            b[..8].clone_from_slice(&bytes[(i << 3)..((i + 1) << 3)]);
+            *messbyte = u64::from_be_bytes(b);
+            // for byte in bytes[(i << 3)..((i + 1) << 3)].iter().enumerate().map(|(n, byte)| byte.overflowing_shl(((7 - n) as u32) << 3).0) {
+            //     *messbyte |= byte;
+            // }
+
+            // for n in 0..8 {
+            //     *messbyte |= (bytes[bidx + n] as u64)
+            //         .overflowing_shl(((7 - n) as u32) << 3)
+            //         .0;
+            // }
         }
+
+        // for i in 0..16 {
+        // }
 
         let mut a = iv[0];
         let mut b = iv[1];

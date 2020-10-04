@@ -20,9 +20,9 @@ fn encode_block(data: &[u8]) -> [u8; 2] {
     let mut res = [0u8; 2];
 
     // write data into the correct spot.
-    for i in 0..16 {
+    for (i, enc_bit) in encoded.iter_mut().enumerate() {
         if ![0, 1, 2, 4, 8].contains(&i) {
-            encoded[i] = data[c];
+            *enc_bit = data[c];
             c += 1;
         }
     }
@@ -40,10 +40,10 @@ fn encode_block(data: &[u8]) -> [u8; 2] {
     // write the last parity bit to spot more errors.
     encoded[0] = encoded.iter().fold(0, |n, i| n ^ i);
 
-    for i in 0..16 {
+    for (i, ecbit) in encoded.iter().enumerate() {
         let (idx, _) = split(i);
         res[idx] <<= 1;
-        res[idx] |= encoded[i];
+        res[idx] |= ecbit;
     }
 
     res
@@ -89,7 +89,7 @@ fn decode_block(data: &[u8; 2]) -> Vec<u8> {
                 Some(bit)
             }
         })
-        .map(|x| *x)
+        .copied()
         .collect()
 }
 
@@ -110,7 +110,7 @@ pub fn encode(data: Vec<u8>) -> Vec<u8> {
             });
 
     // if rest is not drained, pad with zeroes and push to output.
-    if rest.len() > 0 {
+    if !rest.is_empty() {
         while rest.len() < 11 {
             rest.push(0);
         }
@@ -120,7 +120,7 @@ pub fn encode(data: Vec<u8>) -> Vec<u8> {
     output
         .iter()
         .flat_map(|x| x.iter())
-        .map(|x| *x)
+        .copied()
         .collect::<Vec<u8>>()
 }
 
@@ -176,7 +176,7 @@ impl<'a, I: Iterator<Item = u8>> Iterator for ErrCorrEncoder<'a, I> {
             if let Some(next) = self.iterator.next() {
                 self.rest_in_bits
                     .append(&mut (0..8).map(|i| ((next) >> (7 - i)) & 1u8).collect());
-            } else if self.rest_in_bits.len() == 0 {
+            } else if self.rest_in_bits.is_empty() {
                 return None;
             } else {
                 self.rest_in_bits.push(0)

@@ -72,7 +72,7 @@ pub struct PrimeGenerator<'a> {
 }
 
 impl<'a> PrimeGenerator<'a> {
-    pub fn new<'b>(size: usize, rng: &'b mut rand::rngs::ThreadRng) -> PrimeGenerator<'b> {
+    pub fn new(size: usize, rng: &mut rand::rngs::ThreadRng) -> PrimeGenerator<> {
         PrimeGenerator { size, rng }
     }
 
@@ -98,7 +98,7 @@ impl<'a> PrimeGenerator<'a> {
         .enumerate()
         .map(|(n, num)| num + big((n as u32) << 1)) // only take odd numbers
         .filter_map(|n| rabin_miller(n, 7))
-        .filter(|n| {
+        .find(|n| {
             for i in sieve.iter() {
                 if (n - 1.to_biguint().unwrap()) % i == 0.to_biguint().unwrap() {
                     return false;
@@ -106,7 +106,6 @@ impl<'a> PrimeGenerator<'a> {
             }
             true
         })
-        .next()
         .unwrap()
     }
 }
@@ -134,6 +133,12 @@ pub struct Primes {
     primes: Vec<u32>,
 }
 
+impl Default for Primes {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Primes {
     pub fn new() -> Primes {
         Primes { primes: vec![] }
@@ -158,15 +163,14 @@ impl Iterator for Primes {
         let next = std::iter::repeat(seed)
             .enumerate()
             .map(|(n, seed)| n as u32 + seed)
-            .filter_map(|n| {
+            .find(|n| {
                 for p in self.primes.iter() {
                     if n % p == 0 {
-                        return None;
+                        return false;
                     }
                 }
-                Some(n)
+                true
             })
-            .next()
             .unwrap();
         self.primes.push(next);
         Some(next)

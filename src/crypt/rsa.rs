@@ -75,7 +75,7 @@ impl Crypt for RSA {
                     rest.push(*byte);
                     if (rest.len() + 1) * 8 >= self.block_size() {
                         data.push(self.encrypt_block(&BigUint::from_bytes_be(
-                            &mut rest.drain(0..(self.block_size() / 8)).collect::<Vec<u8>>()[..],
+                            &rest.drain(0..(self.block_size() / 8)).collect::<Vec<u8>>()[..],
                         )));
                     }
                     (rest, data)
@@ -83,9 +83,9 @@ impl Crypt for RSA {
 
         assert!(rest.len() > self.size >> 7);
 
-        if rest.len() > 0 {
+        if !rest.is_empty() {
             data.push(self.encrypt_block(&BigUint::from_bytes_be(
-                &mut rest.drain(0..rest.len()).collect::<Vec<u8>>()[..],
+                &rest.drain(0..rest.len()).collect::<Vec<u8>>()[..],
             )));
         }
 

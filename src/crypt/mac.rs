@@ -3,9 +3,9 @@ use super::sha::*;
 const HMAC_LEN: usize = 64;
 const SHA512_BLOCKSIZE: usize = 1024 >> 3;
 
-pub fn hmac(key: &Vec<u8>, text: &Vec<u8>, tag_len: usize) -> Vec<u8> {
+pub fn hmac(key: &[u8], text: &[u8], tag_len: usize) -> Vec<u8> {
     debug_assert!(tag_len <= HMAC_LEN, "tag length exceeds hash length");
-    let mut k_0 = key.clone();
+    let mut k_0 = key.to_owned();
     let hash = HashAlg::Sha512;
 
     if k_0.len() > SHA512_BLOCKSIZE {
@@ -63,8 +63,8 @@ mod tests {
     #[test]
     fn hmac_test_1() {
         let input = b"Sample message for keylen=blocklen".to_vec();
-        let key = (0..0x80).collect();
-        let mac = hmac(&key, &input, 64);
+        let key: Vec<u8> = (0..0x80).collect();
+        let mac = hmac(&key[..], &input, 64);
         let exp = [
             0xFC, 0x25, 0xE2, 0x40, 0x65, 0x8C, 0xA7, 0x85, 0xB7, 0xA8, 0x11, 0xA8, 0xD3, 0xF7,
             0xB4, 0xCA, 0x48, 0xCF, 0xA2, 0x6A, 0x8A, 0x36, 0x6B, 0xF2, 0xCD, 0x1F, 0x83, 0x6B,
@@ -78,8 +78,8 @@ mod tests {
     #[test]
     fn hmac_test_2() {
         let input = b"Sample message for keylen<blocklen".to_vec();
-        let key = (0..0x40).collect();
-        let mac = hmac(&key, &input, 64);
+        let key: Vec<u8> = (0..0x40).collect();
+        let mac = hmac(&key[..], &input, 64);
         let exp = [
             0xFD, 0x44, 0xC1, 0x8B, 0xDA, 0x0B, 0xB0, 0xA6, 0xCE, 0x0E, 0x82, 0xB0, 0x31, 0xBF,
             0x28, 0x18, 0xF6, 0x53, 0x9B, 0xD5, 0x6E, 0xC0, 0x0B, 0xDC, 0x10, 0xA8, 0xA2, 0xD7,
@@ -93,8 +93,8 @@ mod tests {
     #[test]
     fn hmac_test_3() {
         let input = b"Sample message for keylen=blocklen".to_vec();
-        let key = (0..0xC8).collect();
-        let mac = hmac(&key, &input, 64);
+        let key: Vec<u8> = (0..0xC8).collect();
+        let mac = hmac(&key[..], &input, 64);
         let exp = [
             0xD9, 0x3E, 0xC8, 0xD2, 0xDE, 0x1A, 0xD2, 0xA9, 0x95, 0x7C, 0xB9, 0xB8, 0x3F, 0x14,
             0xE7, 0x6A, 0xD6, 0xB5, 0xE0, 0xCC, 0xE2, 0x85, 0x07, 0x9A, 0x12, 0x7D, 0x3B, 0x14,
@@ -108,8 +108,8 @@ mod tests {
     #[test]
     fn hmac_test_4() {
         let input = b"Sample message for keylen<blocklen, with truncated tag".to_vec();
-        let key = (0..0x31).collect();
-        let mac = hmac(&key, &input, 32);
+        let key: Vec<u8> = (0..0x31).collect();
+        let mac = hmac(&key[..], &input, 32);
         let exp = [
             0x00, 0xF3, 0xE9, 0xA7, 0x7B, 0xB0, 0xF0, 0x6D, 0xE1, 0x5F, 0x16, 0x06, 0x03, 0xE4,
             0x2B, 0x50, 0x28, 0x75, 0x88, 0x08, 0x59, 0x66, 0x64, 0xC0, 0x3E, 0x1A, 0xB8, 0xFB,

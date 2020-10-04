@@ -62,16 +62,17 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
     // get password up/down to 256 bit length
     // TODO: better IV creation
     let key_vec = pbkdf2(
-        args.password.bytes().collect(),
-        (0..16).rev().collect(),
+        args.password.as_ref(),
+        &(0..16).rev().collect::<Vec<u8>>()[..],
         10000,
         256,
     );
     assert_eq!(key_vec.len(), 32);
     let mut key = [0u8; 32];
-    for (i, b) in key.iter_mut().enumerate() {
-        *b = key_vec[i];
-    }
+    key[..32].clone_from_slice(&key_vec[..]);
+    // for (i, b) in key.iter_mut().enumerate() {
+    //     *b = key_vec[i];
+    // }
 
     // read input, either from file or from stdin
     if let Some(filename) = args.input {
@@ -80,7 +81,7 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
         std::io::stdin().read_to_end(&mut bytes)?;
     }
 
-    let iv = (0..16).collect();
+    let iv: Vec<u8> = (0..16).collect();
 
     let cipher = match args.cipher {
         CipherType::AES => AES::new(AESKey::AES256(key)),
@@ -89,7 +90,7 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
 
     let data = match args.mode {
         Mode::Encrypt => {
-            cipher.encrypt(&iv, &mut bytes).unwrap();
+            cipher.encrypt(&iv[..], &mut bytes).unwrap();
             bytes.into_iter().encode().collect()
         }
         Mode::Decrypt => {
@@ -97,7 +98,7 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
             while bytes.len() & 15 != 0 {
                 bytes.pop();
             }
-            cipher.decrypt(&iv, &mut bytes).unwrap();
+            cipher.decrypt(&iv[..], &mut bytes).unwrap();
             bytes
         }
     };

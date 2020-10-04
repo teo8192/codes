@@ -97,7 +97,7 @@ pub fn chacha20_block(key: &[u8; 32], counter: &[u8; 8], nonce: &[u8; 8]) -> Box
         state[i + 14] = u32::from_le_bytes(tmp);
     }
 
-    let mut init_state = state.clone();
+    let mut init_state = state;
 
     for _ in 0..10 {
         double_round!(init_state);
@@ -133,7 +133,7 @@ impl ChaCha20 {
 impl Cipher for ChaCha20 {
     /// Encrypt some text with the ChaCha20 stream cipher.
     /// The nonce has to be unique for every encryption.
-    fn encrypt(&self, nonce: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
+    fn encrypt(&self, nonce: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String> {
         if nonce.len() != 8 {
             return Err(format!("nonce len is {} but should be 8.", nonce.len()));
         }
@@ -146,7 +146,7 @@ impl Cipher for ChaCha20 {
 
         let len = plaintext.len();
         // ceil(divide by 64)
-        let blocks = len >> 6 + if len & 63 == 0 { 0 } else { 1 };
+        let blocks = (len >> 6) + if len.trailing_zeros() >= 6 { 0 } else { 1 };
 
         for i in 0..blocks {
             let enc = chacha20_block(&self.key, &counter, &n);
@@ -161,7 +161,7 @@ impl Cipher for ChaCha20 {
 
     /// Decrypt something encrypted with ChaCha20.
     /// This is the same as encrypting it, so no worries
-    fn decrypt(&self, nonce: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
+    fn decrypt(&self, nonce: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String> {
         self.encrypt(nonce, ciphertext)
     }
 }

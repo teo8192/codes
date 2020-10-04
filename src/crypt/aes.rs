@@ -3,15 +3,15 @@
 //! An example usage:
 //!
 //!     # use codes::crypt::{aes::{AES, AESKey}, BlockCipher, pbkdf2, Cipher};
-//!     # let secret_password = b"top secret lol".to_vec();
-//!     # let salt = (0..23).collect();
+//!     # let secret_password = b"top secret lol";
+//!     # let salt: Vec<u8> = (0..23).collect();
 //!     # let iteration_count = 10000;
-//!     # let iv = (0..16u8).collect();
+//!     # let iv: Vec<u8> = (0..16u8).collect();
 //!     let plaintext = b"Lorem ipsum dolor sit amet.".to_vec();
 //!     let mut message = plaintext.clone();
 //!
 //!     // Look up in some NIST publication or RFC for salt generation.
-//!     let key_vec = pbkdf2(secret_password, salt, iteration_count, 256);
+//!     let key_vec = pbkdf2(secret_password, &salt[..], iteration_count, 256);
 //!
 //!     // Just move the key into an array, lots of ways to do this.
 //!     let mut key = [0u8; 32];
@@ -28,7 +28,7 @@
 //!
 //!     assert_eq!(plaintext, message);
 
-use crate::crypt::{BlockCipher, Cipher};
+use crate::crypt::BlockCipher;
 
 // {{{ constant substitution boxes.
 // these should probably be removed, and replaced by a coputational alternative.
@@ -111,9 +111,9 @@ impl<'a> Block<'a> {
                 out[x + y * 4] = self.data[y + x * 4];
             }
         }
-        for i in 0..16 {
-            self.data[i] = out[i];
-            out[i] = 0;
+        for (data, output) in self.data.iter_mut().zip(out.iter_mut()) {
+            *data = *output;
+            *output = 0;
         }
 
         self
@@ -176,16 +176,19 @@ impl<'a> Block<'a> {
     fn shift_rows(&mut self, inverse: bool) -> &mut Self {
         for i in 0..4 {
             let mut buf = [0u8; 4];
-            for j in 0..4 {
-                if inverse {
-                    buf[j] = self.data[i * 4 + ((j + 4 - i) & 3)]
+            for (j, item) in buf.iter_mut().enumerate() {
+                *item = if inverse {
+                    self.data[i * 4 + ((j + 4 - i) & 3)]
                 } else {
-                    buf[j] = self.data[i * 4 + ((i + j) & 3)];
+                    self.data[i * 4 + ((i + j) & 3)]
                 }
             }
 
-            for j in 0..4 {
-                self.data[j + i * 4] = buf[j];
+            for (item, cont) in buf
+                .iter()
+                .zip(self.data[(i << 2)..((i + 1) << 2)].iter_mut())
+            {
+                *cont = *item;
             }
         }
 
@@ -281,6 +284,7 @@ impl AES {
     /// Initialize the AES-thingy with the specified key.
     /// The key needs to be exactly the correct size,
     /// e.g. if you want 128, use exactly 16 bytes, 24 for 192, 32 for 256
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(key_size: AESKey) -> Box<dyn BlockCipher> {
         use AESKey::*;
         let (key, nr, nk) = match &key_size {
@@ -428,7 +432,7 @@ impl BlockCipher for AES {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypt::{BlockCipher, Cipher};
+    use crate::crypt::Cipher;
 
     #[test]
     fn test_multiplication() {
@@ -600,7 +604,7 @@ mod tests {
 
     #[test]
     fn cbc_test() {
-        let iv = (0..16).collect();
+        let iv: Vec<u8> = (0..16).collect();
 
         let key = [
             0x60, 0x3D, 0xEB, 0x10, 0x15, 0xCA, 0x71, 0xBE, 0x2B, 0x73, 0xAE, 0xF0, 0x85, 0x7D,

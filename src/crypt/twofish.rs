@@ -29,18 +29,15 @@ pub struct Twofish {
 }
 
 impl Twofish {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(key: &[u8]) -> Box<dyn BlockCipher> {
         let (k, s) = expand_key(key);
         Box::new(Twofish { s, k })
     }
 
-    fn g(&self, input: u32) -> u32 {
-        h(input, &self.s)
-    }
-
-    fn f(&self, r_0: u32, r_1: u32, r: usize) -> (u32, u32) {
-        let t_0 = self.g(r_0);
-        let t_1 = self.g(rotl!(r_1, 8));
+    fn feistel(&self, r_0: u32, r_1: u32, r: usize) -> (u32, u32) {
+        let t_0 = h(r_0, &self.s);
+        let t_1 = h(rotl!(r_1, 8), &self.s);
 
         (
             sum!(t_0, t_1, self.k[2 * r + 8]),
@@ -58,7 +55,7 @@ impl BlockCipher for Twofish {
         }
 
         for r in 0..16 {
-            let (f0, f1) = self.f(input[0], input[1], r);
+            let (f0, f1) = self.feistel(input[0], input[1], r);
 
             let r0 = (input[2] ^ f0).rotate_right(1);
             let r1 = input[3].rotate_left(1) ^ f1;
@@ -81,7 +78,7 @@ impl BlockCipher for Twofish {
             *b = c[n];
         }
 
-        let o = convert_from_block(input);
+        let o = convert_from_block(&input);
         for (block, out) in block.iter_mut().zip(o.iter()) {
             *block = *out;
         }
@@ -101,7 +98,7 @@ impl BlockCipher for Twofish {
         }
 
         for r in (0..16).rev() {
-            let (f0, f1) = self.f(input[2], input[3], r);
+            let (f0, f1) = self.feistel(input[2], input[3], r);
 
             let r2 = input[0].rotate_left(1) ^ f0;
             let r3 = (input[1] ^ f1).rotate_right(1);
@@ -118,7 +115,7 @@ impl BlockCipher for Twofish {
             *b ^= self.k[n];
         }
 
-        let o = convert_from_block(input);
+        let o = convert_from_block(&input);
         for (block, out) in block.iter_mut().zip(o.iter()) {
             *block = *out;
         }
@@ -142,7 +139,7 @@ fn convert_to_block(block: &[u8]) -> Box<[u32; 4]> {
     Box::new(p)
 }
 
-fn convert_from_block(block: Box<[u32; 4]>) -> Box<[u8; 16]> {
+fn convert_from_block(block: &[u32; 4]) -> Box<[u8; 16]> {
     let mut res = [0u8; 16];
 
     for i in 0..4 {
@@ -251,14 +248,14 @@ fn q1(x: u8) -> u8 {
     )
 }
 
-fn h(X: u32, L: &Vec<u32>) -> u32 {
-    let k = L.len();
-    let x = X.to_le_bytes();
+fn h(number: u32, list: &[u32]) -> u32 {
+    let k = list.len();
+    let x = number.to_le_bytes();
 
     let y = {
         let mut inner = (x[0], x[1], x[2], x[3]);
         if k == 4 {
-            let l = L[3].to_le_bytes();
+            let l = list[3].to_le_bytes();
             inner = (
                 q1(inner.0) ^ l[0],
                 q0(inner.1) ^ l[1],
@@ -267,7 +264,7 @@ fn h(X: u32, L: &Vec<u32>) -> u32 {
             );
         }
         if k >= 3 {
-            let l = L[2].to_le_bytes();
+            let l = list[2].to_le_bytes();
             inner = (
                 q1(inner.0) ^ l[0],
                 q1(inner.1) ^ l[1],
@@ -275,7 +272,7 @@ fn h(X: u32, L: &Vec<u32>) -> u32 {
                 q0(inner.3) ^ l[3],
             );
         }
-        let l = L[1].to_le_bytes();
+        let l = list[1].to_le_bytes();
         inner = (
             q0(inner.0) ^ l[0],
             q1(inner.1) ^ l[1],
@@ -283,7 +280,7 @@ fn h(X: u32, L: &Vec<u32>) -> u32 {
             q1(inner.3) ^ l[3],
         );
 
-        let l = L[0].to_le_bytes();
+        let l = list[0].to_le_bytes();
         inner = (
             q0(inner.0) ^ l[0],
             q0(inner.1) ^ l[1],
@@ -357,7 +354,7 @@ mod tests {
         }
 
         let converted = convert_to_block(&bytes);
-        let back = convert_from_block(converted);
+        let back = convert_from_block(&converted);
 
         assert_eq!(back[..], bytes[..]);
     }

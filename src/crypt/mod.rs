@@ -22,9 +22,9 @@ pub enum EncryptionMode {
 }
 
 pub trait Cipher {
-    fn encrypt(&self, iv: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String>;
+    fn encrypt(&self, iv: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String>;
 
-    fn decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String>;
+    fn decrypt(&self, iv: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String>;
 }
 
 /// Any block cipher implementingthis trait may be used with the implementation of CBC.
@@ -41,13 +41,13 @@ pub trait BlockCipher {
     }
 
     /// Change the encryption mode.
-    fn change_encryption_mode(&mut self, mode: EncryptionMode) {}
+    fn change_encryption_mode(&mut self, _mode: EncryptionMode) {}
 }
 
 impl dyn BlockCipher {
     /// Encrypt bytes in CBC mode.
     /// It will always add padding.
-    fn cbc_encrypt(&self, iv: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
+    fn cbc_encrypt(&self, iv: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String> {
         if iv.len() != self.block_size() {
             return Err(format!(
                 "input vector is wrong length, expected {}, got {}",
@@ -56,13 +56,16 @@ impl dyn BlockCipher {
             ));
         }
         let bs = self.block_size();
-        let mut prev_block: Vec<u8> = iv.clone();
+        let prev_block: &mut [u8] = &mut iv.to_vec();
 
         pad(plaintext, bs);
 
         for i in 0..plaintext.len() / bs {
-            for j in 0..bs {
-                plaintext[i * bs + j] ^= prev_block[j];
+            for (pltxt, prev) in plaintext[(i * bs)..((i + 1) * bs)]
+                .iter_mut()
+                .zip(prev_block.iter())
+            {
+                *pltxt ^= *prev;
             }
 
             self.encrypt_block(&mut plaintext[(i * bs)..((i + 1) * bs)]);
@@ -75,7 +78,7 @@ impl dyn BlockCipher {
     }
 
     /// Decrypt bytes that was encrypted in CBC mode
-    fn cbc_decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
+    fn cbc_decrypt(&self, iv: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String> {
         let bs = self.block_size();
 
         if iv.len() != bs {
@@ -92,24 +95,23 @@ impl dyn BlockCipher {
                 bs,
             ));
         }
-        let mut prev_block = iv.clone();
+        let prev_block: &mut [u8] = &mut iv.to_vec();
 
         for i in 0..(ciphertext.len() / bs) {
             let current_block = &mut ciphertext[(i * bs)..((i + 1) * bs)];
 
             // save the current ciphertext to remove
             // the chaining of the next block
-            let pb = prev_block.clone();
-            for i in 0..bs {
-                prev_block[i] = current_block[i];
-            }
+            let pb = prev_block.to_vec();
+
+            prev_block[..bs].clone_from_slice(&current_block[..bs]);
 
             // decrypt current block
             self.decrypt_block(current_block);
 
             // Reverse the chaining
-            for j in 0..bs {
-                current_block[j] ^= pb[j];
+            for (cur, prev) in current_block.iter_mut().zip(pb.iter()) {
+                *cur ^= *prev;
             }
         }
 
@@ -118,7 +120,7 @@ impl dyn BlockCipher {
         Ok(())
     }
 
-    fn ecb_encrypt(&self, _: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
+    fn ecb_encrypt(&self, _: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String> {
         let bs = self.block_size();
 
         pad(plaintext, bs);
@@ -130,7 +132,7 @@ impl dyn BlockCipher {
         Ok(())
     }
 
-    fn ecb_decrypt(&self, _: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
+    fn ecb_decrypt(&self, _: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String> {
         let bs = self.block_size();
 
         if ciphertext.len() % bs != 0 {
@@ -169,16 +171,14 @@ fn pad(bytes: &mut Vec<u8>, bs: usize) {
     // append a one, a lot of zeros and then the number of padded bytes
     // ends up something like this:
     // 1 0 0 0 0 0 0 0 0 0 0 12
-    bytes.append(&mut one.chain(zeros).chain(end_num.iter()).map(|x| *x).collect());
+    bytes.append(&mut one.chain(zeros).chain(end_num.iter()).cloned().collect());
 }
 
 fn strip_padding(bytes: &mut Vec<u8>) {
     let mut end = [0u8; 4];
     let offset = bytes.len() - std::mem::size_of::<u32>();
 
-    for i in 0..4 {
-        end[i] = bytes[i + offset];
-    }
+    end[..4].clone_from_slice(&bytes[offset..(4 + offset)]);
 
     // Get the number at the end
     let end = u32::from_le_bytes(end) as usize;
@@ -188,7 +188,7 @@ fn strip_padding(bytes: &mut Vec<u8>) {
 }
 
 impl Cipher for dyn BlockCipher {
-    fn encrypt(&self, iv: &Vec<u8>, plaintext: &mut Vec<u8>) -> Result<(), String> {
+    fn encrypt(&self, iv: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String> {
         use EncryptionMode::*;
         match self.encryption_mode() {
             CBC => self.cbc_encrypt(iv, plaintext),
@@ -196,7 +196,7 @@ impl Cipher for dyn BlockCipher {
         }
     }
 
-    fn decrypt(&self, iv: &Vec<u8>, ciphertext: &mut Vec<u8>) -> Result<(), String> {
+    fn decrypt(&self, iv: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String> {
         use EncryptionMode::*;
         match self.encryption_mode() {
             CBC => self.cbc_decrypt(iv, ciphertext),
@@ -205,13 +205,13 @@ impl Cipher for dyn BlockCipher {
     }
 }
 
-fn pbkdf2_round(password: &Vec<u8>, salt: &Vec<u8>, count: usize, i: usize) -> Box<[u8; 32]> {
+fn pbkdf2_round(password: &[u8], salt: &[u8], count: usize, i: usize) -> Box<[u8; 32]> {
     let mut result = Box::new([0u8; 32]);
-    let mut k = salt.clone();
+    let mut k = salt.to_owned();
     k.append(&mut format!("{}", i).into_bytes());
-    let mut tmp_0 = mac::hmac(password, &k, 32);
+    let mut tmp_0 = mac::hmac(&password.to_owned(), &k, 32);
     for _ in 1..count {
-        let tmp = mac::hmac(password, &tmp_0, 32);
+        let tmp = mac::hmac(&password.to_owned(), &tmp_0, 32);
         for (i, b) in tmp.iter().enumerate() {
             result[i] ^= b;
         }
@@ -228,12 +228,12 @@ fn pbkdf2_round(password: &Vec<u8>, salt: &Vec<u8>, count: usize, i: usize) -> B
 ///  - salt is a salt
 ///  - dklen is the derived key length in bits
 ///  - c is the iteration count
-pub fn pbkdf2(password: Vec<u8>, salt: Vec<u8>, c: usize, dklen: usize) -> Vec<u8> {
+pub fn pbkdf2(password: &[u8], salt: &[u8], c: usize, dklen: usize) -> Vec<u8> {
     debug_assert!(dklen <= ((1 << 32) - 1) * 256, "derived key too long");
     let l = dklen / 256 + if dklen % 256 != 0 { 1 } else { 0 };
     let mut res = Vec::new();
     let mut counter = 0;
-    'outer: for block in (0..l).map(|i| pbkdf2_round(&password, &salt, c, i)) {
+    'outer: for block in (0..l).map(|i| pbkdf2_round(password, salt, c, i)) {
         for b in block.iter() {
             if counter * 8 >= dklen {
                 break 'outer;
