@@ -52,7 +52,8 @@ macro_rules! double_round {
 }
 
 // The counter is not added now, since that is the thing that is changed between each block.
-fn initialize_block(block: &mut [u32; 16], key: &[u8; 32], nonce: &[u8; 8]) {
+fn initialize_block(key: &[u8; 32], nonce: &[u8; 8]) -> [u32; 16] {
+    let mut block = [0u32; 16];
     let blockconst = b"expand 32-byte k";
     let mut tmp = [0u8; 4];
 
@@ -79,6 +80,8 @@ fn initialize_block(block: &mut [u32; 16], key: &[u8; 32], nonce: &[u8; 8]) {
         }
         block[i + 14] = u32::from_le_bytes(tmp);
     }
+
+    block
 }
 
 /// Nonce is a non-sectret that may be used only once per encryption.
@@ -133,23 +136,33 @@ impl Cipher for ChaCha20 {
         if nonce.len() != 8 {
             return Err(format!("nonce len is {} but should be 8.", nonce.len()));
         }
+        // convert the nonce to an array instead of a slice
+        // the input should maybe be an array, but oh well.
         let mut n = [0u8; 8];
         for (i, b) in nonce.iter().zip(n.iter_mut()) {
             *b = *i;
         }
 
-        let mut block = [0u32; 16]; // the state
+        // the initial state of the cipher,
+        // only missing the counter.
+        // This is shared for all threads encrypting
+        let block = initialize_block(&self.key, &n);
 
-        initialize_block(&mut block, &self.key, &n);
-
-        let plaintext_blocks: Vec<(usize, &mut [u8])> =
-            plaintext.chunks_mut(64).enumerate().collect();
-
-        // this is parallelizable, the counter may be found with enumerate?
-        plaintext_blocks
+        // slice the plaintext up into blocks
+        // and enumerate them. Then parallellize the operation
+        // and encrypt/decrypt the block.
+        plaintext
+            .chunks_mut(64)
+            .enumerate()
+            .collect::<Vec<(usize, &mut [u8])>>()
             .into_par_iter()
             .for_each(|(n, mut plain_block)| {
-                chacha20_block(&block, &mut plain_block, &[0, n as u32])
+                // start counting from 1
+                let c = n + 1;
+                // convert the usize counter to two u32.
+                let counter = [(c >> 32) as u32, (c & ((1 << 32) - 1)) as u32];
+                // encrypt the block
+                chacha20_block(&block, &mut plain_block, &counter)
             });
 
         Ok(())
