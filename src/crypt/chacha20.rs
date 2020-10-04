@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 use super::Cipher;
 
 macro_rules! min {
@@ -140,11 +142,15 @@ impl Cipher for ChaCha20 {
 
         initialize_block(&mut block, &self.key, &n);
 
+        let plaintext_blocks: Vec<(usize, &mut [u8])> =
+            plaintext.chunks_mut(64).enumerate().collect();
+
         // this is parallelizable, the counter may be found with enumerate?
-        for (n, mut plain_block) in plaintext.chunks_mut(64).enumerate() {
-            // calculate the pseudo-random bytes
-            chacha20_block(&block, &mut plain_block, &[0, n as u32]);
-        }
+        plaintext_blocks
+            .into_par_iter()
+            .for_each(|(n, mut plain_block)| {
+                chacha20_block(&block, &mut plain_block, &[0, n as u32])
+            });
 
         Ok(())
     }
