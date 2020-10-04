@@ -62,40 +62,46 @@ fn increment(counter: &mut [u8; 8]) {
     }
 }
 
-/// Nonce is a non-sectret that may be used only once per encryption.
-pub fn chacha20_block(key: &[u8; 32], counter: &[u8; 8], nonce: &[u8; 8]) -> Box<[u8; 64]> {
+fn initialize_block(block: &mut [u32; 16], key: &[u8; 32], counter: &[u8; 8], nonce: &[u8; 8]) {
     let blockconst = b"expand 32-byte k";
     let mut tmp = [0u8; 4];
-
-    let mut state = [0u32; 16];
 
     for i in 0..4 {
         for j in 0..4 {
             tmp[i] = blockconst[(i << 2) + j];
         }
-        state[i] = u32::from_le_bytes(tmp);
+        block[i] = u32::from_le_bytes(tmp);
     }
 
     for i in 0..8 {
         for j in 0..4 {
             tmp[j] = key[j + (i << 2)];
         }
-        state[i + 4] = u32::from_le_bytes(tmp);
+        block[i + 4] = u32::from_le_bytes(tmp);
     }
 
     for i in 0..2 {
         for j in 0..4 {
             tmp[j] = counter[j + (i << 2)];
         }
-        state[i + 12] = u32::from_le_bytes(tmp);
+        block[i + 12] = u32::from_le_bytes(tmp);
     }
 
     for i in 0..2 {
         for j in 0..4 {
             tmp[j] = nonce[j + (i << 2)];
         }
-        state[i + 14] = u32::from_le_bytes(tmp);
+        block[i + 14] = u32::from_le_bytes(tmp);
     }
+}
+
+/// Nonce is a non-sectret that may be used only once per encryption.
+///
+/// Since this function is probably called multiple times in a row, it takes the result block as
+/// the first argument instead of putting the result in a box. This is to save on heap allocations.
+pub fn chacha20_block(block: &mut [u8; 64], key: &[u8; 32], counter: &[u8; 8], nonce: &[u8; 8]) {
+    let mut state = [0u32; 16];
+    initialize_block(&mut state, key, counter, nonce);
 
     let mut init_state = state;
 
@@ -107,15 +113,12 @@ pub fn chacha20_block(key: &[u8; 32], counter: &[u8; 8], nonce: &[u8; 8]) -> Box
         *s = s.overflowing_add(*i).0;
     }
 
-    let mut res = [0u8; 64];
     for i in 0..16 {
         let tmp = state[i].to_le_bytes();
         for j in 0..4 {
-            res[(i << 2) + j] = tmp[j];
+            block[(i << 2) + j] = tmp[j];
         }
     }
-
-    Box::new(res)
 }
 
 pub struct ChaCha20 {
@@ -147,12 +150,13 @@ impl Cipher for ChaCha20 {
         let len = plaintext.len();
         // ceil(divide by 64)
         let blocks = (len >> 6) + if len.trailing_zeros() >= 6 { 0 } else { 1 };
+        let mut block = [0u8; 64];
 
         for i in 0..blocks {
-            let enc = chacha20_block(&self.key, &counter, &n);
+            chacha20_block(&mut block, &self.key, &counter, &n);
             increment(&mut counter);
             for j in 0..min!(len - (i << 6), 64) {
-                plaintext[(i << 6) + j] ^= enc[j];
+                plaintext[(i << 6) + j] ^= block[j];
             }
         }
 
@@ -217,8 +221,12 @@ mod tests {
         let mut nonce = [0u8; 8];
         nonce[3] = 9;
         nonce[7] = 0x4a;
+        // the specification did not mention the endianess of the counter (and it is not
+        // particularily important, so this is a big-endian counter, because it will not be used as
+        // a counter when not in byte form)
         let counter = [0, 0, 0, 0, 0, 0, 0, 1];
 
-        let _enc = chacha20_block(&key, &counter, &nonce);
+        let mut block = [0u8; 64];
+        chacha20_block(&mut block, &key, &counter, &nonce);
     }
 }
