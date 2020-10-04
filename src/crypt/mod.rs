@@ -22,9 +22,9 @@ pub enum EncryptionMode {
 }
 
 pub trait Cipher {
-    fn encrypt(&self, iv: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String>;
+    fn encrypt(&self, iv: &[u8], plaintext: &mut [u8]) -> Result<(), String>;
 
-    fn decrypt(&self, iv: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String>;
+    fn decrypt(&self, iv: &[u8], ciphertext: &mut [u8]) -> Result<(), String>;
 }
 
 /// Any block cipher implementingthis trait may be used with the implementation of CBC.
@@ -47,7 +47,7 @@ pub trait BlockCipher {
 impl dyn BlockCipher {
     /// Encrypt bytes in CBC mode.
     /// It will always add padding.
-    fn cbc_encrypt(&self, iv: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String> {
+    fn cbc_encrypt(&self, iv: &[u8], plaintext: &mut [u8]) -> Result<(), String> {
         if iv.len() != self.block_size() {
             return Err(format!(
                 "input vector is wrong length, expected {}, got {}",
@@ -58,7 +58,7 @@ impl dyn BlockCipher {
         let bs = self.block_size();
         let prev_block: &mut [u8] = &mut iv.to_vec();
 
-        pad(plaintext, bs);
+        // pad(plaintext, bs);
 
         for i in 0..plaintext.len() / bs {
             for (pltxt, prev) in plaintext[(i * bs)..((i + 1) * bs)]
@@ -78,7 +78,7 @@ impl dyn BlockCipher {
     }
 
     /// Decrypt bytes that was encrypted in CBC mode
-    fn cbc_decrypt(&self, iv: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String> {
+    fn cbc_decrypt(&self, iv: &[u8], ciphertext: &mut [u8]) -> Result<(), String> {
         let bs = self.block_size();
 
         if iv.len() != bs {
@@ -115,15 +115,15 @@ impl dyn BlockCipher {
             }
         }
 
-        strip_padding(ciphertext);
+        // strip_padding(ciphertext);
 
         Ok(())
     }
 
-    fn ecb_encrypt(&self, _: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String> {
+    fn ecb_encrypt(&self, _: &[u8], plaintext: &mut [u8]) -> Result<(), String> {
         let bs = self.block_size();
 
-        pad(plaintext, bs);
+        // pad(plaintext, bs);
 
         for i in 0..plaintext.len() / bs {
             self.encrypt_block(&mut plaintext[(i * bs)..((i + 1) * bs)]);
@@ -132,7 +132,7 @@ impl dyn BlockCipher {
         Ok(())
     }
 
-    fn ecb_decrypt(&self, _: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String> {
+    fn ecb_decrypt(&self, _: &[u8], ciphertext: &mut [u8]) -> Result<(), String> {
         let bs = self.block_size();
 
         if ciphertext.len() % bs != 0 {
@@ -148,13 +148,13 @@ impl dyn BlockCipher {
             self.decrypt_block(&mut ciphertext[(i * bs)..((i + 1) * bs)]);
         }
 
-        strip_padding(ciphertext);
+        // strip_padding(ciphertext);
 
         Ok(())
     }
 }
 
-fn pad(bytes: &mut Vec<u8>, bs: usize) {
+pub fn pad(bytes: &mut Vec<u8>, bs: usize) {
     let len: u32 = bytes.len() as u32;
     let end_bytes: u32 = 32 >> 3;
     let zeros = bs - ((end_bytes + len + 1) as usize % bs);
@@ -174,7 +174,7 @@ fn pad(bytes: &mut Vec<u8>, bs: usize) {
     bytes.append(&mut one.chain(zeros).chain(end_num.iter()).cloned().collect());
 }
 
-fn strip_padding(bytes: &mut Vec<u8>) {
+pub fn strip_padding(bytes: &mut Vec<u8>) {
     let mut end = [0u8; 4];
     let offset = bytes.len() - std::mem::size_of::<u32>();
 
@@ -188,7 +188,10 @@ fn strip_padding(bytes: &mut Vec<u8>) {
 }
 
 impl Cipher for dyn BlockCipher {
-    fn encrypt(&self, iv: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String> {
+    fn encrypt(&self, iv: &[u8], plaintext: &mut [u8]) -> Result<(), String> {
+        if plaintext.len() % self.block_size() != 0 {
+            return Err(format!("You should consider padding your messages."));
+        }
         use EncryptionMode::*;
         match self.encryption_mode() {
             CBC => self.cbc_encrypt(iv, plaintext),
@@ -196,7 +199,7 @@ impl Cipher for dyn BlockCipher {
         }
     }
 
-    fn decrypt(&self, iv: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String> {
+    fn decrypt(&self, iv: &[u8], ciphertext: &mut [u8]) -> Result<(), String> {
         use EncryptionMode::*;
         match self.encryption_mode() {
             CBC => self.cbc_decrypt(iv, ciphertext),
