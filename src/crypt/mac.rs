@@ -9,7 +9,7 @@ pub fn hmac(key: &[u8], text: &[u8], tag_len: usize) -> Vec<u8> {
     let hash = HashAlg::Sha512;
 
     if k_0.len() > SHA512_BLOCKSIZE {
-        let res: Box<[u8]> = hash.hash(k_0.iter());
+        let res: Box<[u8]> = hash.hash(k_0);
         let mut out = Vec::new();
         for i in (*res).iter() {
             out.push(*i);
@@ -41,7 +41,7 @@ pub fn hmac(key: &[u8], text: &[u8], tag_len: usize) -> Vec<u8> {
         kxoripad.push(*b);
     }
 
-    let res = hash.hash(kxoripad.iter());
+    let res = hash.hash(kxoripad);
 
     let mut kxoropad = Vec::new();
 
@@ -51,7 +51,7 @@ pub fn hmac(key: &[u8], text: &[u8], tag_len: usize) -> Vec<u8> {
 
     kxoropad.append(&mut res.to_vec());
 
-    let mac = hash.hash(kxoropad.iter());
+    let mac = hash.hash(kxoropad);
 
     mac[0..tag_len].to_vec()
 }

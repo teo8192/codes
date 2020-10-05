@@ -192,9 +192,9 @@ pub trait Hash<T> {
     fn size(&self) -> usize;
 }
 
-impl<'a, I> Hash<I> for HashAlg
+impl<V> Hash<V> for HashAlg
 where
-    I: IntoIterator<Item = &'a u8, IntoIter = std::slice::Iter<'a, u8>>,
+    std::vec::Vec<u8>: From<V>,
 {
     fn size(&self) -> usize {
         use HashAlg::*;
@@ -207,7 +207,7 @@ where
         }
     }
 
-    fn hash(&self, data: I) -> Box<[u8]> {
+    fn hash(&self, data: V) -> Box<[u8]> {
         use HashAlg::*;
 
         let mut iv = match self {
@@ -253,7 +253,7 @@ where
             ],
         };
 
-        sha512_base(data.into_iter().copied(), &mut iv);
+        sha512_base(data, &mut iv);
 
         match self {
             Sha512_224 => create_box!(iv, 224, u64),
@@ -264,56 +264,26 @@ where
     }
 }
 
-fn sha512_base<I: Iterator<Item = u8>>(mut input: I, iv: &mut [u64; 8]) {
-    let mut at_end = false;
-    let mut added_one = false;
-    let mut counter = 0u128;
+fn sha512_base<V>(input: V, iv: &mut [u64; 8])
+where
+    std::vec::Vec<u8>: From<V>,
+{
+    let mut padded: Vec<u8> = Vec::from(input);
+    let initial_len = padded.len();
+    let zeros = 128 - ((padded.len() + std::mem::size_of::<u128>() + 1) & 127);
 
-    while !at_end {
-        let mut m = [0u64; 16];
-        let mut bytes: Vec<u8> = (&mut input).take(128).collect();
+    padded.push(1 << 7);
+    padded.append(&mut std::iter::repeat(0).take(zeros).collect());
+    padded.append(&mut ((initial_len << 3) as u128).to_be_bytes().to_vec());
 
-        if bytes.len() < 128 {
-            if !added_one {
-                counter += (bytes.len() as u128) << 3;
-                bytes.push(1 << 7);
-                added_one = true;
-            }
+    let mut m = [0u64; 16];
 
-            if bytes.len() > 112 {
-                while bytes.len() < 128 {
-                    bytes.push(0);
-                }
-            } else {
-                while bytes.len() < 112 {
-                    bytes.push(0);
-                }
-
-                bytes.append(&mut counter.to_be_bytes().to_vec());
-                at_end = true;
-            }
-        } else {
-            counter += 1024;
-        }
-
+    for c in padded.chunks(128) {
         for (i, messbyte) in m.iter_mut().enumerate() {
-            // let bidx = i << 3;
             let mut b = [0u8; 8];
-            b[..8].clone_from_slice(&bytes[(i << 3)..((i + 1) << 3)]);
+            b[..8].clone_from_slice(&c[(i << 3)..((i + 1) << 3)]);
             *messbyte = u64::from_be_bytes(b);
-            // for byte in bytes[(i << 3)..((i + 1) << 3)].iter().enumerate().map(|(n, byte)| byte.overflowing_shl(((7 - n) as u32) << 3).0) {
-            //     *messbyte |= byte;
-            // }
-
-            // for n in 0..8 {
-            //     *messbyte |= (bytes[bidx + n] as u64)
-            //         .overflowing_shl(((7 - n) as u32) << 3)
-            //         .0;
-            // }
         }
-
-        // for i in 0..16 {
-        // }
 
         let mut a = iv[0];
         let mut b = iv[1];
@@ -378,7 +348,7 @@ mod tests {
             0x2a, 0x9a, 0xc9, 0x4f, 0xa5, 0x4c, 0xa4, 0x9f,
         ];
 
-        let input = b"abc";
+        let input = "abc";
         let hash = HashAlg::Sha512;
         let output = hash.hash(input);
 
@@ -389,7 +359,7 @@ mod tests {
     fn test_multiline_b() {
         let input: Vec<u8> = (0x61..0x6f).flat_map(|i| i..(i + 8)).collect();
         let hash = HashAlg::Sha512;
-        let output = hash.hash(&input[..]);
+        let output = hash.hash(input);
 
         let expected = [
             0x8E, 0x95, 0x9B, 0x75, 0xDA, 0xE3, 0x13, 0xDA, 0x8C, 0xF4, 0xF7, 0x28, 0x14, 0xFC,
@@ -404,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_sha512_256() {
-        let input = b"Unde labore cumque quos iure aut ipsa. Voluptatem non explicabo voluptatem nesciunt pariatur vel. Aut asperiores molestiae quis.
+        let input = "Unde labore cumque quos iure aut ipsa. Voluptatem non explicabo voluptatem nesciunt pariatur vel. Aut asperiores molestiae quis.
 
 Ad animi nobis et aut et odio provident. Et quidem et molestiae quidem adipisci quia. Dolore molestiae ut excepturi debitis. Debitis vel qui laborum voluptas.
 
@@ -414,7 +384,7 @@ Accusantium corrupti dolor adipisci quisquam dolorum qui aut eos. Adipisci enim 
 
 Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occaecati. Molestiae iusto soluta voluptas quisquam vero a adipisci exercitationem. Consectetur harum sint ea. Distinctio et vero repellendus a.";
         let hash = HashAlg::Sha512_256;
-        let output = hash.hash(input.iter());
+        let output = hash.hash(input);
 
         let expected = [
             0x09, 0xa4, 0xa7, 0xff, 0x2e, 0xa4, 0x7b, 0xa4, 0x2d, 0xd0, 0x63, 0xf5, 0x5a, 0xde,
@@ -435,7 +405,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
 
         // let output: Box<[u8; 32]> = b"abc".iter().map(|x| *x).hash();
         let hash = HashAlg::Sha512_256;
-        let output = hash.hash(b"abc");
+        let output = hash.hash("abc");
 
         assert_eq!(result[..], output[..]);
     }
@@ -450,7 +420,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
 
         let input: Vec<u8> = (0x61..0x6f).flat_map(|i| i..(i + 8)).collect();
         let hash = HashAlg::Sha512_256;
-        let output = hash.hash(&input[..]);
+        let output = hash.hash(input);
 
         assert_eq!(result[..], output[..]);
     }
@@ -465,8 +435,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
         ];
 
         let hash = HashAlg::Sha384;
-        let output = hash.hash(b"abc");
-        // let output: Box<[u8; 48]> = b"abc".iter().map(|x| *x).hash();
+        let output = hash.hash("abc");
 
         assert_eq!(result[..], output[..]);
     }
@@ -482,7 +451,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
 
         let input: Vec<u8> = (0x61..0x6f).flat_map(|i| i..(i + 8)).collect();
         let hash = HashAlg::Sha384;
-        let output = hash.hash(&input[..]);
+        let output = hash.hash(input);
 
         assert_eq!(result[..], output[..]);
     }
@@ -495,7 +464,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
         ];
 
         let hash = HashAlg::Sha512_224;
-        let output = hash.hash(b"abc");
+        let output = hash.hash("abc");
 
         assert_eq!(result[..], output[..]);
     }
@@ -510,7 +479,7 @@ Officiis et placeat alias voluptatem quasi non. Reiciendis qui quo mollitia occa
         let input: Vec<u8> = (0x61..0x6fu8).flat_map(|i| i..(i + 8)).collect();
 
         let hash = HashAlg::Sha512_224;
-        let output = hash.hash(&input[..]);
+        let output = hash.hash(input);
 
         assert_eq!(result[..], output[..]);
     }
