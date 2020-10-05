@@ -1,5 +1,6 @@
 use codes::crypt::aes::{AESKey, AES};
 use codes::crypt::pbkdf2;
+use codes::crypt::mac::HMAC;
 use codes::crypt::twofish::Twofish;
 use codes::crypt::Cipher;
 use codes::error::hamming::ErrorDetection;
@@ -66,6 +67,7 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
         &(0..16).rev().collect::<Vec<u8>>()[..],
         10000,
         256,
+        &HMAC::default()
     );
     assert_eq!(key_vec.len(), 32);
     let mut key = [0u8; 32];

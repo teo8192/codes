@@ -2,7 +2,7 @@
 //!
 //! An example usage:
 //!
-//!     # use codes::crypt::{aes::{AES, AESKey}, BlockCipher, pbkdf2, Cipher};
+//!     # use codes::crypt::{aes::{AES, AESKey}, BlockCipher, pbkdf2, Cipher, mac::HMAC};
 //!     # let secret_password = b"top secret lol";
 //!     # let salt: Vec<u8> = (0..23).collect();
 //!     # let iteration_count = 10000;
@@ -11,7 +11,7 @@
 //!     let mut message = plaintext.clone();
 //!
 //!     // Look up in some NIST publication or RFC for salt generation.
-//!     let key_vec = pbkdf2(secret_password, &salt[..], iteration_count, 256);
+//!     let key_vec = pbkdf2(secret_password, &salt[..], iteration_count, 256, &HMAC::default());
 //!
 //!     // Just move the key into an array, lots of ways to do this.
 //!     let mut key = [0u8; 32];

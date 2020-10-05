@@ -187,15 +187,25 @@ macro_rules! create_box {
     }};
 }
 
-pub trait Hash<T> {
-    fn hash(&self, data: T) -> Box<[u8]>;
+pub trait Hash {
+    fn hash<T>(&self, data: T) -> Box<[u8]>
+    where
+        std::vec::Vec<u8>: From<T>;
+    /// return the digest size in bits
     fn size(&self) -> usize;
+    /// Return the block size in bits
+    fn block_size(&self) -> usize;
 }
 
-impl<V> Hash<V> for HashAlg
-where
-    std::vec::Vec<u8>: From<V>,
-{
+impl Hash for HashAlg {
+    fn block_size(&self) -> usize {
+        use HashAlg::*;
+
+        match self {
+            Sha512_224 | Sha512_256 | Sha384 | Sha512 => 1024,
+        }
+    }
+
     fn size(&self) -> usize {
         use HashAlg::*;
 
@@ -207,7 +217,10 @@ where
         }
     }
 
-    fn hash(&self, data: V) -> Box<[u8]> {
+    fn hash<V>(&self, data: V) -> Box<[u8]>
+    where
+        std::vec::Vec<u8>: From<V>,
+    {
         use HashAlg::*;
 
         let mut iv = match self {

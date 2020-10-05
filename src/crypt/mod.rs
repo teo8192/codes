@@ -208,13 +208,13 @@ impl Cipher<&mut Vec<u8>> for dyn BlockCipher {
     }
 }
 
-fn pbkdf2_round(password: &[u8], salt: &[u8], count: usize, i: usize) -> Box<[u8; 32]> {
+fn pbkdf2_round<M: mac::MAC>(password: &[u8], salt: &[u8], count: usize, i: usize, mac: &M) -> Box<[u8; 32]> {
     let mut result = Box::new([0u8; 32]);
     let mut k = salt.to_owned();
     k.append(&mut format!("{}", i).into_bytes());
-    let mut tmp_0 = mac::hmac(&password.to_owned(), &k, 32);
+    let mut tmp_0 = mac.mac(&password.to_owned(), &k, 32);
     for _ in 1..count {
-        let tmp = mac::hmac(&password.to_owned(), &tmp_0, 32);
+        let tmp = mac.mac(&password.to_owned(), &tmp_0, 32);
         for (i, b) in tmp.iter().enumerate() {
             result[i] ^= b;
         }
@@ -231,12 +231,13 @@ fn pbkdf2_round(password: &[u8], salt: &[u8], count: usize, i: usize) -> Box<[u8
 ///  - salt is a salt
 ///  - dklen is the derived key length in bits
 ///  - c is the iteration count
-pub fn pbkdf2(password: &[u8], salt: &[u8], c: usize, dklen: usize) -> Vec<u8> {
+///  - mac is the keyed message authentication
+pub fn pbkdf2<M: mac::MAC>(password: &[u8], salt: &[u8], c: usize, dklen: usize, mac: &M) -> Vec<u8> {
     debug_assert!(dklen <= ((1 << 32) - 1) * 256, "derived key too long");
     let l = dklen / 256 + if dklen % 256 != 0 { 1 } else { 0 };
     let mut res = Vec::new();
     let mut counter = 0;
-    'outer: for block in (0..l).map(|i| pbkdf2_round(password, salt, c, i)) {
+    'outer: for block in (0..l).map(|i| pbkdf2_round(password, salt, c, i, mac)) {
         for b in block.iter() {
             if counter * 8 >= dklen {
                 break 'outer;
