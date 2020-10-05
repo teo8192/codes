@@ -4,7 +4,7 @@
 //!
 //!     # use codes::crypt::sha::*;
 //!     let hash = HashAlg::Sha512;
-//!     let digest = hash.hash(b"Lorem ipsum dolor sit amet.");
+//!     let digest = hash.hash("Lorem ipsum dolor sit amet.");
 
 pub enum HashAlg {
     Sha384,
