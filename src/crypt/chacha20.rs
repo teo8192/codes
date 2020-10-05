@@ -1,3 +1,6 @@
+//! The ChaCha20 cihper, based on the Salsa20 cipher.
+//! This is a stream cipher.
+
 use rayon::prelude::*;
 
 use super::Cipher;
@@ -93,12 +96,15 @@ pub fn chacha20_block(in_block: &[u32; 16], out_block: &mut [u8], counter: &[u32
     let mut state = *in_block;
     state[12..14].clone_from_slice(&counter[..]);
 
+    // The init state is a copy of state, not a pointer to the same location.
     let mut init_state = state;
 
     // do the 20 rounds (10 double rounds)
     for _ in 0..10 {
         double_round!(init_state);
     }
+
+    debug_assert_ne!(init_state, state);
 
     // This is a non-bijectove addition, so is makes it particulary difficult to reverse the block
     for (s, i) in state.iter_mut().zip(init_state.iter()) {
@@ -129,7 +135,7 @@ impl ChaCha20 {
     }
 }
 
-impl Cipher for ChaCha20 {
+impl Cipher<&mut [u8]> for ChaCha20 {
     /// Encrypt some text with the ChaCha20 stream cipher.
     /// The nonce has to be unique for every encryption.
     fn encrypt(&self, nonce: &[u8], plaintext: &mut [u8]) -> Result<(), String> {

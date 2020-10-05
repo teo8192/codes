@@ -70,9 +70,6 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
     assert_eq!(key_vec.len(), 32);
     let mut key = [0u8; 32];
     key[..32].clone_from_slice(&key_vec[..]);
-    // for (i, b) in key.iter_mut().enumerate() {
-    //     *b = key_vec[i];
-    // }
 
     // read input, either from file or from stdin
     if let Some(filename) = args.input {

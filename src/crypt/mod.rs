@@ -21,10 +21,10 @@ pub enum EncryptionMode {
     ECB, //< Electronic Codebook mode, You should rather use CBC or something
 }
 
-pub trait Cipher {
-    fn encrypt(&self, iv: &[u8], plaintext: &mut [u8]) -> Result<(), String>;
+pub trait Cipher<T> {
+    fn encrypt(&self, iv: &[u8], plaintext: T) -> Result<(), String>;
 
-    fn decrypt(&self, iv: &[u8], ciphertext: &mut [u8]) -> Result<(), String>;
+    fn decrypt(&self, iv: &[u8], ciphertext: T) -> Result<(), String>;
 }
 
 /// Any block cipher implementingthis trait may be used with the implementation of CBC.
@@ -187,11 +187,9 @@ pub fn strip_padding(bytes: &mut Vec<u8>) {
     bytes.drain((bytes.len() - end)..bytes.len());
 }
 
-impl Cipher for dyn BlockCipher {
-    fn encrypt(&self, iv: &[u8], plaintext: &mut [u8]) -> Result<(), String> {
-        if plaintext.len() % self.block_size() != 0 {
-            return Err("You should consider padding your messages.".to_string());
-        }
+impl Cipher<&mut Vec<u8>> for dyn BlockCipher {
+    fn encrypt(&self, iv: &[u8], plaintext: &mut Vec<u8>) -> Result<(), String> {
+        pad(plaintext, self.block_size());
         use EncryptionMode::*;
         match self.encryption_mode() {
             CBC => self.cbc_encrypt(iv, plaintext),
@@ -199,12 +197,14 @@ impl Cipher for dyn BlockCipher {
         }
     }
 
-    fn decrypt(&self, iv: &[u8], ciphertext: &mut [u8]) -> Result<(), String> {
+    fn decrypt(&self, iv: &[u8], ciphertext: &mut Vec<u8>) -> Result<(), String> {
         use EncryptionMode::*;
         match self.encryption_mode() {
-            CBC => self.cbc_decrypt(iv, ciphertext),
-            ECB => self.ecb_decrypt(iv, ciphertext),
-        }
+            CBC => self.cbc_decrypt(iv, ciphertext)?,
+            ECB => self.ecb_decrypt(iv, ciphertext)?,
+        };
+        strip_padding(ciphertext);
+        Ok(())
     }
 }
 

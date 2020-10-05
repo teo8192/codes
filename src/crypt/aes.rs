@@ -2,14 +2,13 @@
 //!
 //! An example usage:
 //!
-//!     # use codes::crypt::{aes::{AES, AESKey}, BlockCipher, pbkdf2, Cipher, pad, strip_padding};
+//!     # use codes::crypt::{aes::{AES, AESKey}, BlockCipher, pbkdf2, Cipher};
 //!     # let secret_password = b"top secret lol";
 //!     # let salt: Vec<u8> = (0..23).collect();
 //!     # let iteration_count = 10000;
 //!     # let iv: Vec<u8> = (0..16u8).collect();
 //!     let plaintext = b"Lorem ipsum dolor sit amet.".to_vec();
 //!     let mut message = plaintext.clone();
-//!     pad(&mut message, 16);
 //!
 //!     // Look up in some NIST publication or RFC for salt generation.
 //!     let key_vec = pbkdf2(secret_password, &salt[..], iteration_count, 256);
@@ -21,13 +20,11 @@
 //!     let aes = AES::new(AESKey::AES256(key));
 //!
 //!     // You need to select an unpredictable input vector for every encryption
-//!     aes.encrypt(&iv, &mut message[..]);
+//!     aes.encrypt(&iv, &mut message);
 //!
 //!     assert_ne!(plaintext, message);
 //!
-//!     aes.decrypt(&iv, &mut message[..]);
-//!
-//!     strip_padding(&mut message);
+//!     aes.decrypt(&iv, &mut message);
 //!
 //!     assert_eq!(plaintext, message);
 
@@ -575,16 +572,13 @@ mod tests {
     fn stream_test_iterator() {
         let iv: Vec<u8> = (0..16).collect();
 
-        let mut plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+        let plaintext = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In pretium magna commodo, posuere lacus nec, tempor mi. Etiam vel cursus massa, in ornare arcu. Vivamus tortor metus, blandit vitae ultricies in, eleifend vitae magna. Pellentesque iaculis arcu leo, eu faucibus ex ultricies sed. Suspendisse velit velit, viverra sit amet leo vitae, porttitor egestas elit. Duis ut imperdiet lectus, ac iaculis ex. Maecenas venenatis nibh in erat malesuada, non aliquam nisi ultrices. Maecenas egestas mollis rhoncus. Vestibulum nunc leo, malesuada ac ornare sed, rutrum vitae mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
 
             Vestibulum sagittis ullamcorper odio, vel luctus justo dapibus lobortis. Aliquam finibus interdum massa, eget auctor urna lacinia vel. Suspendisse congue velit quis justo porttitor fringilla. Quisque vel aliquam nibh, ut congue metus. Nullam maximus, ipsum et efficitur ornare, justo mi malesuada ante, vitae accumsan est neque a ante. Ut cursus sed ex id elementum. Nulla purus massa, hendrerit quis porttitor et, volutpat id metus. Curabitur eget egestas nisl, vitae sodales diam. Donec a sapien eleifend, congue massa ut, aliquet lectus. Nunc in fermentum mauris, in dignissim dolor. Vestibulum tempor sed ipsum mattis lobortis. Proin in tellus at elit finibus tempus vitae sit amet mi. Ut ut bibendum dolor. Mauris nisl tortor, dignissim in metus eu, blandit venenatis odio.
 
             Fusce dapibus ac odio quis consectetur. Ut at lectus euismod sapien pretium eleifend. Praesent id massa non dolor pretium lacinia ut quis arcu. Vestibulum quis lorem ac odio tempor vestibulum ac at purus. Aenean dignissim enim ut iaculis accumsan. Suspendisse eget magna vitae magna euismod elementum ultricies nec quam. Sed malesuada sollicitudin lectus sed lobortis. Integer nec sapien vel arcu interdum accumsan. Phasellus finibus ut ex in sollicitudin. Fusce vestibulum pellentesque leo, efficitur tempor metus condimentum in. Aliquam a mauris ac augue lobortis accumsan vitae vel turpis. Nulla tempor eros velit, at aliquam dui fermentum vitae.
 
             In felis nisi, congue a mattis eget, aliquet nec neque. Quisque venenatis ante in arcu scelerisque euismod. Cras mollis, lacus a iaculis porttitor, lacus erat fermentum justo, non molestie enim neque et magna. Praesent non ornare ipsum, et feugiat eros. In porttitor dictum lobortis. Cras luctus urna vel justo consequat, non vestibulum dui placerat. Curabitur est nunc, lobortis sed vehicula vitae, ornare a urna. Sed bibendum aliquam rutrum. Pellentesque sodales tellus orci, et volutpat justo condimentum eget. Praesent magna sapien, porttitor a ante id, vehicula rutrum tortor. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam suscipit lorem ac interdum varius. Sed varius metus eu dapibus hendrerit. Fusce consequat egestas varius.".to_vec();
-        while plaintext.len() & 15 != 0 {
-            plaintext.pop();
-        }
 
         let key = [
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
