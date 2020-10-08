@@ -8,6 +8,7 @@ Here is some of the resources used:
  - AES, [NIST FIPS 197](https://csrc.nist.gov/publications/detail/fips/197/final) (my implementation is vulnerable to S-box related timing attacks)
  - Secure Hashing Algorithm (SHA) [NIST FIPS 180-4](https://csrc.nist.gov/publications/detail/fips/180/4/final)
  - HMAC [NIST FIPS 198-1](https://csrc.nist.gov/publications/detail/fips/198/1/final)
+ - CMAC [NIST SP 800-38B](https://csrc.nist.gov/publications/detail/sp/800-38b/final)
  - PBKDF2: [RFC8018](https://tools.ietf.org/html/rfc8018)
  - [Twofish](https://www.schneier.com/academic/archives/1998/06/twofish_a_128-bit_bl.html)
  - ChaCha20: [RFC8439](https://tools.ietf.org/html/rfc8439) but with 64 bit counter and nonce
@@ -33,10 +34,10 @@ cargo run --example cryptor --release -- [-h] [-i inputfile] [-o outputfile] [-p
  - [ ] Poly1305
  - [ ] SHA256 fam
  - [ ] SHA3
- - [ ] CMAC
  - [ ] Elliptic curves (Curve25519)
  - [ ] Digital signatures?
  - [ ] Fix input vectors and salts
+ - [x] CMAC
  - [x] Twofish
  - [x] Message padding like SHA512 for CBC
  - [x] CBC in place on mutable vector
