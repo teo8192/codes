@@ -23,16 +23,52 @@ macro_rules! ror41 {
     }};
 }
 
+pub enum TwofishKey {
+    TK128([u8; 16]),
+    TK192([u8; 24]),
+    TK256([u8; 32]),
+}
+
+impl<'a> std::convert::TryFrom<super::CipherKey<'a>> for TwofishKey {
+    type Error=String;
+
+    fn try_from(key: super::CipherKey) -> Result<TwofishKey, Self::Error> {
+        match key.key.len() {
+            16 => {
+                let mut key_arr = [0u8; 16];
+                key_arr[..].clone_from_slice(key.key);
+                Ok(TwofishKey::TK128(key_arr))
+            },
+            24 => {
+                let mut key_arr = [0u8; 24];
+                key_arr[..].clone_from_slice(key.key);
+                Ok(TwofishKey::TK192(key_arr))
+            },
+            32 => {
+                let mut key_arr = [0u8; 32];
+                key_arr[..].clone_from_slice(key.key);
+                Ok(TwofishKey::TK256(key_arr))
+            },
+            _ => Err("Not implemented yet".to_string()),
+        }
+    }
+}
+
 pub struct Twofish {
     sub_box: Vec<u32>,
-    key: Box<[u32; 40]>,
+    exp_key: Box<[u32; 40]>,
+    key: TwofishKey,
 }
 
 impl Twofish {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(key: &[u8]) -> Box<dyn BlockCipher> {
-        let (key, sub_box) = expand_key(key);
-        Box::new(Twofish { sub_box, key })
+    pub fn new(key: TwofishKey) -> Box<dyn BlockCipher> {
+        let (exp_key, sub_box) = expand_key(&key);
+        Box::new(Twofish {
+            sub_box,
+            exp_key,
+            key,
+        })
     }
 
     fn feistel(&self, r_0: u32, r_1: u32, r: usize) -> (u32, u32) {
@@ -40,8 +76,8 @@ impl Twofish {
         let t_1 = h(rotl!(r_1, 8), &self.sub_box);
 
         (
-            sum!(t_0, t_1, self.key[2 * r + 8]),
-            sum!(t_0, t_1.overflowing_shl(1).0, self.key[2 * r + 9]),
+            sum!(t_0, t_1, self.exp_key[2 * r + 8]),
+            sum!(t_0, t_1.overflowing_shl(1).0, self.exp_key[2 * r + 9]),
         )
     }
 }
@@ -51,7 +87,7 @@ impl BlockCipher for Twofish {
         let mut input = convert_to_block(block);
 
         for (n, b) in input.iter_mut().enumerate() {
-            *b ^= self.key[n];
+            *b ^= self.exp_key[n];
         }
 
         for r in 0..16 {
@@ -71,7 +107,7 @@ impl BlockCipher for Twofish {
         let mut c = [0u32; 4];
 
         for i in 0..4 {
-            c[i] = input[(i + 2) & 3] ^ self.key[i + 4];
+            c[i] = input[(i + 2) & 3] ^ self.exp_key[i + 4];
         }
 
         for (n, b) in input.iter_mut().enumerate() {
@@ -90,7 +126,7 @@ impl BlockCipher for Twofish {
         let mut c = [0u32; 4];
 
         for (n, b) in input.iter().enumerate() {
-            c[(n + 2) & 3] = *b ^ self.key[n + 4];
+            c[(n + 2) & 3] = *b ^ self.exp_key[n + 4];
         }
 
         for (n, b) in input.iter_mut().enumerate() {
@@ -112,7 +148,7 @@ impl BlockCipher for Twofish {
         }
 
         for (n, b) in input.iter_mut().enumerate() {
-            *b ^= self.key[n];
+            *b ^= self.exp_key[n];
         }
 
         let o = convert_from_block(&input);
@@ -123,6 +159,46 @@ impl BlockCipher for Twofish {
 
     fn block_size(&self) -> usize {
         16
+    }
+
+    fn get_key(&self) -> &[u8] {
+        use TwofishKey::*;
+        match &self.key {
+            TK128(key) => &key[..],
+            TK192(key) => &key[..],
+            TK256(key) => &key[..],
+        }
+    }
+
+    fn set_key(&mut self, key: &[u8]) -> Result<(), String> {
+        use TwofishKey::*;
+        let key_sized;
+        match key.len() {
+            32 => {
+                let mut k = [0u8; 32];
+                k[..].clone_from_slice(key);
+                key_sized = TK256(k);
+            }
+            24 => {
+                let mut k = [0u8; 24];
+                k[..].clone_from_slice(key);
+                key_sized = TK192(k);
+            }
+            16 => {
+                let mut k = [0u8; 16];
+                k[..].clone_from_slice(key);
+                key_sized = TK128(k);
+            }
+            _ => return Err(format!("{} is not a key length for AES", key.len())),
+        }
+
+        let (exp_key, sub_box) = expand_key(&key_sized);
+
+        self.exp_key = exp_key;
+        self.sub_box = sub_box;
+        self.key = key_sized;
+
+        Ok(())
     }
 }
 
@@ -303,7 +379,13 @@ fn h(number: u32, list: &[u32]) -> u32 {
     u32::from_le_bytes(res)
 }
 
-fn expand_key(key: &[u8]) -> (Box<[u32; 40]>, Vec<u32>) {
+fn expand_key(key: &TwofishKey) -> (Box<[u32; 40]>, Vec<u32>) {
+    use TwofishKey::*;
+    let key = match key {
+        TK128(key) => &key[..],
+        TK192(key) => &key[..],
+        TK256(key) => &key[..],
+    };
     let k = key.len() >> 3; // N / 64
     let mut m_e: Vec<u32> = Vec::new();
     let mut m_o: Vec<u32> = Vec::new();
@@ -362,8 +444,9 @@ mod tests {
     #[test]
     fn test_encryption() {
         // let key = pbkdf2(b"password".to_vec(), (0..16).collect(), 1000, 256);
-        let key: Vec<u8> = std::iter::repeat(0).take(16).collect::<Vec<u8>>();
-        let twofish = Twofish::new(&key[..]);
+        // let key: Vec<u8> = std::iter::repeat(0).take(16).collect::<Vec<u8>>();
+        let key = [0u8; 16];
+        let twofish = Twofish::new(TwofishKey::TK128(key));
 
         // let expected_key: [u32; 40] = [
         //     0x52C54DDE, 0x11F0626D, 0x7CAC9D4A, 0x4D1B4AAA, 0xB7B83A10, 0x1E7D0BEB, 0xEE9C341F,
@@ -390,8 +473,8 @@ mod tests {
 
     #[test]
     fn test_decryption() {
-        let key: Vec<u8> = std::iter::repeat(0).take(16).collect::<Vec<u8>>();
-        let twofish = Twofish::new(&key[..]);
+        let key = [0u8; 16];
+        let twofish = Twofish::new(TwofishKey::TK128(key));
         let mut encrypted: [u8; 16] = [
             0x9F, 0x58, 0x9F, 0x5C, 0xF6, 0x12, 0x2C, 0x32, 0xB6, 0xBF, 0xEC, 0x2F, 0x2A, 0xE8,
             0xC3, 0x5A,

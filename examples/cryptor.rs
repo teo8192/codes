@@ -1,7 +1,7 @@
 use codes::crypt::aes::{AESKey, AES};
-use codes::crypt::pbkdf2;
 use codes::crypt::mac::HMAC;
-use codes::crypt::twofish::Twofish;
+use codes::crypt::pbkdf2;
+use codes::crypt::twofish::{Twofish, TwofishKey};
 use codes::crypt::Cipher;
 use codes::error::hamming::ErrorDetection;
 use std::fs::File;
@@ -67,7 +67,7 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
         &(0..16).rev().collect::<Vec<u8>>()[..],
         10000,
         256,
-        &HMAC::default()
+        &HMAC::default(),
     );
     assert_eq!(key_vec.len(), 32);
     let mut key = [0u8; 32];
@@ -84,7 +84,7 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
 
     let cipher = match args.cipher {
         CipherType::AES => AES::new(AESKey::AES256(key)),
-        CipherType::Twofish => Twofish::new(&key),
+        CipherType::Twofish => Twofish::new(TwofishKey::TK256(key)),
     };
 
     let data = match args.mode {

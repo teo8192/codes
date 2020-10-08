@@ -84,13 +84,6 @@ struct Block<'a> {
 
 #[allow(dead_code)]
 impl<'a> Block<'a> {
-    /// Creates a new empty block, filled with zeros
-    // pub fn new() -> Self {
-    //     Block {
-    //         data: Box::new([0u8; 16]),
-    //     }
-    // }
-
     /// Copy the content of another block into this block.
     pub fn copy(&mut self, other: &Block) {
         for i in 0..16 {
@@ -262,6 +255,32 @@ pub enum AESKey {
     AES256([u8; 32]),
 }
 
+impl<'a> std::convert::TryFrom<super::CipherKey<'a>> for AESKey {
+    type Error=String;
+
+    fn try_from(key: super::CipherKey) -> Result<AESKey, Self::Error> {
+        match key.key.len() {
+            16 => {
+                let mut key_arr = [0u8; 16];
+                key_arr[..].clone_from_slice(key.key);
+                Ok(AESKey::AES128(key_arr))
+            }
+            24 => {
+                let mut key_arr = [0u8; 24];
+                key_arr[..].clone_from_slice(key.key);
+                Ok(AESKey::AES192(key_arr))
+            }
+            32 => {
+                let mut key_arr = [0u8; 32];
+                key_arr[..].clone_from_slice(key.key);
+                Ok(AESKey::AES256(key_arr))
+            }
+            _ => Err("Not implemented yet".to_string()),
+        }
+    }
+}
+
+
 /// The key AES key.
 /// only contains the generated round key and number of rounds,
 /// the rest (e.g. original key, number of rounds etc) seemed
@@ -270,12 +289,25 @@ pub struct AES {
     w: Vec<u8>,
     nr: usize,
     mode: super::EncryptionMode,
+    key: AESKey,
 }
 
+/// Clear important data from memory
 impl Drop for AES {
     fn drop(&mut self) {
-        for i in 0..self.w.len() {
-            self.w[i] = 0;
+        use AESKey::*;
+        for i in self.w.iter_mut() {
+            *i = 0;
+        }
+
+        for i in match &mut self.key {
+            AES128(key) => &mut key[..],
+            AES192(key) => &mut key[..],
+            AES256(key) => &mut key[..],
+        }
+        .iter_mut()
+        {
+            *i = 0;
         }
     }
 }
@@ -301,6 +333,7 @@ impl AES {
             w,
             nr,
             mode: super::EncryptionMode::CBC,
+            key: key_size,
         })
     }
 
@@ -425,6 +458,54 @@ impl BlockCipher for AES {
 
     fn encryption_mode(&self) -> super::EncryptionMode {
         self.mode
+    }
+
+    fn get_key(&self) -> &[u8] {
+        use AESKey::*;
+        match &self.key {
+            AES128(key) => &key[..],
+            AES192(key) => &key[..],
+            AES256(key) => &key[..],
+        }
+    }
+
+    fn set_key(&mut self, key: &[u8]) -> Result<(), String> {
+        use AESKey::*;
+        let key_sized;
+        match key.len() {
+            32 => {
+                let mut k = [0u8; 32];
+                k[..].clone_from_slice(key);
+                key_sized = AES256(k);
+            }
+            24 => {
+                let mut k = [0u8; 24];
+                k[..].clone_from_slice(key);
+                key_sized = AES192(k);
+            }
+            16 => {
+                let mut k = [0u8; 16];
+                k[..].clone_from_slice(key);
+                key_sized = AES128(k);
+            }
+            _ => return Err(format!("{} is not a key length for AES", key.len())),
+        }
+
+        let (key, nr, nk) = match &key_sized {
+            AES128(key) => (&key[..], 10, 4),
+            AES192(key) => (&key[..], 12, 6),
+            AES256(key) => (&key[..], 14, 8),
+        };
+
+        // 16 = 4 * Nb
+        let mut w = vec![0u8; 16 * (nr + 1)];
+        AES::key_expansion(&key, &mut w, nk, nr);
+
+        self.w = w;
+        self.nr = nr;
+        self.key = key_sized;
+
+        Ok(())
     }
 }
 
