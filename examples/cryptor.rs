@@ -1,4 +1,5 @@
 use codes::crypt::aes::{AESKey, AES};
+use codes::crypt::chacha20::{XChaCha20};
 use codes::crypt::mac::HMAC;
 use codes::crypt::pbkdf2;
 use codes::crypt::twofish::{Twofish, TwofishKey};
@@ -22,6 +23,8 @@ enum CipherType {
     AES,
     #[structopt(name = "twofish")]
     Twofish,
+    #[structopt(name = "xchacha20")]
+    XChaCha20,
 }
 
 impl Default for CipherType {
@@ -37,6 +40,7 @@ impl std::str::FromStr for CipherType {
         match s {
             "aes" => Ok(Self::AES),
             "twofish" => Ok(Self::Twofish),
+            "xchacha20" => Ok(Self::XChaCha20),
             _ => Err(format!("{} is an unrcognized cipher", s)),
         }
     }
@@ -83,21 +87,36 @@ fn run(args: Cli) -> Result<(), std::io::Error> {
     let iv: Vec<u8> = (0..16).collect();
 
     let cipher = match args.cipher {
-        CipherType::AES => AES::new(AESKey::AES256(key)),
-        CipherType::Twofish => Twofish::new(TwofishKey::TK256(key)),
+        CipherType::AES => Some(AES::new(AESKey::AES256(key))),
+        CipherType::Twofish => Some(Twofish::new(TwofishKey::TK256(key))),
+        _ => None,
     };
 
     let data = match args.mode {
         Mode::Encrypt => {
-            cipher.encrypt(&iv[..], &mut bytes).unwrap();
+            match cipher {
+                Some(c) => c.encrypt(&iv[..], &mut bytes).unwrap(),
+                None => {
+                    let chacha = XChaCha20::new(&key);
+                    chacha.encrypt(&(0..24).collect::<Vec<u8>>()[..], &mut bytes).unwrap();
+                }
+            }
             bytes.into_iter().encode().collect()
         }
         Mode::Decrypt => {
             bytes = bytes.into_iter().decode().collect();
-            while bytes.len() & 15 != 0 {
-                bytes.pop();
+            match cipher {
+                Some(c) => {
+                    while bytes.len() & 15 != 0 {
+                        bytes.pop();
+                    }
+                    c.decrypt(&iv[..], &mut bytes).unwrap();
+                }
+                None => {
+                    let chacha = XChaCha20::new(&key);
+                    chacha.decrypt(&(0..24).collect::<Vec<u8>>()[..], &mut bytes).unwrap();
+                }
             }
-            cipher.decrypt(&iv[..], &mut bytes).unwrap();
             bytes
         }
     };

@@ -41,19 +41,6 @@ macro_rules! quarter_round {
     }};
 }
 
-macro_rules! double_round {
-    ($state:expr) => {{
-        quarter_round!($state, 0, 4, 8, 12);
-        quarter_round!($state, 1, 5, 9, 13);
-        quarter_round!($state, 2, 6, 10, 14);
-        quarter_round!($state, 3, 7, 11, 15);
-        quarter_round!($state, 0, 5, 10, 15);
-        quarter_round!($state, 1, 6, 11, 12);
-        quarter_round!($state, 2, 7, 8, 13);
-        quarter_round!($state, 3, 4, 9, 14);
-    }};
-}
-
 // The counter is not added now, since that is the thing that is changed between each block.
 fn initialize_block(key: &[u8; 32], nonce: &[u8; 8]) -> [u32; 16] {
     let mut block = [0u32; 16];
@@ -63,7 +50,7 @@ fn initialize_block(key: &[u8; 32], nonce: &[u8; 8]) -> [u32; 16] {
     // Add in the block constant
     for i in 0..4 {
         for j in 0..4 {
-            tmp[i] = blockconst[(i << 2) + j];
+            tmp[j] = blockconst[(i << 2) + j];
         }
         block[i] = u32::from_le_bytes(tmp);
     }
@@ -87,6 +74,63 @@ fn initialize_block(key: &[u8; 32], nonce: &[u8; 8]) -> [u32; 16] {
     block
 }
 
+fn printblock(block: &[u32; 16]) {
+    for (i, n) in block.iter().enumerate() {
+        if i > 0 {
+            if i & 3 == 0 {
+                println!();
+            }
+        }
+
+        print!("{:08X} ", n);
+    }
+}
+
+fn hchacha(key: &[u8; 32], nonce: &[u8; 16]) -> [u8; 32] {
+    let mut n = [0u8; 8];
+    for (b, i) in n.iter_mut().zip(nonce[8..16].iter()) {
+        *b = *i;
+    }
+    let mut block = initialize_block(key, &n);
+
+    for i in 0..2 {
+        let mut tmp = [0u8; 4];
+        for j in 0..4 {
+            tmp[j] = nonce[j + (i << 2)];
+        }
+        block[i + 12] = u32::from_le_bytes(tmp);
+    }
+
+    for _ in 0..10 {
+        quarter_round!(block, 0, 4, 8, 12);
+        quarter_round!(block, 1, 5, 9, 13);
+        quarter_round!(block, 2, 6, 10, 14);
+        quarter_round!(block, 3, 7, 11, 15);
+        quarter_round!(block, 0, 5, 10, 15);
+        quarter_round!(block, 1, 6, 11, 12);
+        quarter_round!(block, 2, 7, 8, 13);
+        quarter_round!(block, 3, 4, 9, 14);
+    }
+
+    let mut res = [0u8; 32];
+
+    for i in 0..4 {
+        let tmp = block[i].to_le_bytes();
+        for j in 0..4 {
+            res[(i << 2) + j] = tmp[j];
+        }
+    }
+
+    for i in 0..4 {
+        let tmp = block[i + 12].to_le_bytes();
+        for j in 0..4 {
+            res[16 + (i << 2) + j] = tmp[j];
+        }
+    }
+
+    res
+}
+
 /// Nonce is a non-sectret that may be used only once per encryption.
 ///
 /// Since this function is probably called multiple times in a row, it takes the result block as
@@ -101,7 +145,14 @@ pub fn chacha20_block(in_block: &[u32; 16], out_block: &mut [u8], counter: &[u32
 
     // do the 20 rounds (10 double rounds)
     for _ in 0..10 {
-        double_round!(init_state);
+        quarter_round!(init_state, 0, 4, 8, 12);
+        quarter_round!(init_state, 1, 5, 9, 13);
+        quarter_round!(init_state, 2, 6, 10, 14);
+        quarter_round!(init_state, 3, 7, 11, 15);
+        quarter_round!(init_state, 0, 5, 10, 15);
+        quarter_round!(init_state, 1, 6, 11, 12);
+        quarter_round!(init_state, 2, 7, 8, 13);
+        quarter_round!(init_state, 3, 4, 9, 14);
     }
 
     debug_assert_ne!(init_state, state);
@@ -120,6 +171,71 @@ pub fn chacha20_block(in_block: &[u32; 16], out_block: &mut [u8], counter: &[u32
         for j in 0..min!(4, len - (i << 2)) {
             out_block[(i << 2) + j] ^= tmp[j];
         }
+    }
+}
+
+pub struct XChaCha20 {
+    key: Box<[u8; 32]>,
+}
+
+impl XChaCha20 {
+    pub fn new(key: &[u8; 32]) -> Self {
+        XChaCha20 {
+            key: Box::new(*key),
+        }
+    }
+}
+
+impl Cipher<&mut [u8]> for XChaCha20 {
+    /// Encrypt some text with the ChaCha20 stream cipher.
+    /// The nonce has to be unique for every encryption.
+    fn encrypt(&self, nonce: &[u8], plaintext: &mut [u8]) -> Result<(), String> {
+        if nonce.len() != 24 {
+            return Err(format!("nonce len is {} but should be 12.", nonce.len()));
+        }
+        // convert the nonce to an array instead of a slice
+        // the input should maybe be an array, but oh well.
+        let mut n = [0u8; 8];
+        for (i, b) in nonce[16..24].iter().zip(n.iter_mut()) {
+            *b = *i;
+        }
+
+        let mut hn = [0u8; 16];
+        for (i, b) in nonce[0..16].iter().zip(hn.iter_mut()) {
+            *b = *i;
+        }
+
+        let new_key = hchacha(&self.key, &hn);
+
+        // the initial state of the cipher,
+        // only missing the counter.
+        // This is shared for all threads encrypting
+        let block = initialize_block(&new_key, &n);
+
+        // slice the plaintext up into blocks
+        // and enumerate them. Then parallellize the operation
+        // and encrypt/decrypt the block.
+        plaintext
+            .chunks_mut(64)
+            .enumerate()
+            .collect::<Vec<(usize, &mut [u8])>>()
+            .into_par_iter()
+            .for_each(|(n, mut plain_block)| {
+                // start counting from 1
+                let c = n + 1;
+                // convert the usize counter to two u32.
+                let counter = [(c >> 32) as u32, (c & ((1 << 32) - 1)) as u32];
+                // encrypt the block
+                chacha20_block(&block, &mut plain_block, &counter)
+            });
+
+        Ok(())
+    }
+
+    /// Decrypt something encrypted with ChaCha20.
+    /// This is the same as encrypting it, so no worries
+    fn decrypt(&self, nonce: &[u8], ciphertext: &mut [u8]) -> Result<(), String> {
+        self.encrypt(nonce, ciphertext)
     }
 }
 
@@ -275,5 +391,24 @@ mod tests {
         assert_eq!(encrypted[..], plaintext[..]);
 
         Ok(())
+    }
+
+    #[test]
+    fn hchacha_test() {
+        let mut key = [0u8; 32];
+        for (k, i) in key.iter_mut().zip(0..32) {
+            *k = i;
+        }
+        let nonce: [u8; 16] = [
+            00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x4a, 0x00, 0x00, 0x00, 0x00, 0x31, 0x41, 0x59,
+            0x27,
+        ];
+        let new_key = hchacha(&key, &nonce);
+        let expected = [
+            0x82, 0x41, 0x3b, 0x42, 0x27, 0xb2, 0x7b, 0xfe, 0xd3, 0x0e, 0x42, 0x50, 0x8a, 0x87,
+            0x7d, 0x73, 0xa0, 0xf9, 0xe4, 0xd5, 0x8a, 0x74, 0xa8, 0x53, 0xc1, 0x2e, 0xc4, 0x13,
+            0x26, 0xd3, 0xec, 0xdc,
+        ];
+        assert_eq!(&new_key, &expected);
     }
 }
