@@ -79,7 +79,7 @@ impl MAC for CMAC {
                     let mut tmp = [0u8; 16];
                     tmp[..m.len()].clone_from_slice(&m[..]);
                     if length == n + 1 {
-                        if m.len() < 16 && text.len() != 0 {
+                        if m.len() < 16 && !text.is_empty() {
                             tmp[m.len()] = 1 << 7;
                         }
                         for (m, b) in tmp
