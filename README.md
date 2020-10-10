@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/teo8192/codes.svg?branch=master)](https://travis-ci.com/teo8192/codes)
+
 # About
 
 This is a cryptographic library (mostly made for fun and academic purpose).
