@@ -34,6 +34,7 @@ cargo run --example cryptor --release -- [-h] [-i inputfile] [-o outputfile] [-p
 # Stuff to implement
 
  - [ ] Poly1305
+ - [ ] Fortuna using ChaCha20?
  - [ ] SHA256 fam
  - [ ] SHA3
  - [ ] Elliptic curves (Curve25519)
