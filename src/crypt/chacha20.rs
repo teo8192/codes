@@ -283,6 +283,7 @@ impl Cipher<&mut [u8]> for ChaCha20 {
                 let c = n + 1;
                 // convert the usize counter to two u32.
                 let counter = [(c >> 32) as u32, (c & ((1 << 32) - 1)) as u32];
+                println!("{}", plain_block.len());
                 // encrypt the block
                 chacha20_block(&block, &mut plain_block, &counter)
             });
