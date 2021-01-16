@@ -164,7 +164,8 @@ pub fn chacha20_block(in_block: &[u32; 16], out_block: &mut [u8], counter: &[u32
 
     // convert the integers back to bytes
     let len = out_block.len();
-    let words = len >> 2;
+    // round up
+    let words = len >> 2 + if len & 3 > 0 { 1 } else { 0 };
     for i in 0..words {
         let tmp = state[i].to_le_bytes();
         // could be faster not doing this every time, but oh well
