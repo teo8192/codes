@@ -166,7 +166,6 @@ pub fn chacha20_block(in_block: &[u32; 16], out_block: &mut [u8], counter: &[u32
     let len = out_block.len();
     // round up
     let words = (len >> 2) + if len & 3 > 0 { 1 } else { 0 };
-    println!("words: {}, len: {}", words, len);
     for i in 0..words {
         let tmp = state[i].to_le_bytes();
         // could be faster not doing this every time, but oh well
@@ -285,7 +284,6 @@ impl Cipher<&mut [u8]> for ChaCha20 {
                 let c = n + 1;
                 // convert the usize counter to two u32.
                 let counter = [(c >> 32) as u32, (c & ((1 << 32) - 1)) as u32];
-                println!("{}", plain_block.len());
                 // encrypt the block
                 chacha20_block(&block, &mut plain_block, &counter)
             });
